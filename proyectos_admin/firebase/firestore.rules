@@ -1,0 +1,23 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(uid) { return request.auth != null && request.auth.uid == uid; }
+
+    match /administradores/{adminId} {
+      allow read, write: if isOwner(adminId);
+    }
+
+    match /concursos/{concursoId} {
+      allow create: if isSignedIn() && request.resource.data.admin_uid == request.auth.uid;
+      allow read: if isSignedIn();
+      allow update, delete: if isSignedIn() && resource.data.admin_uid == request.auth.uid;
+
+      match /categorias/{catId} {
+        allow read: if isSignedIn();
+        allow write, update, delete: if isSignedIn() &&
+          get(/databases/$(database)/documents/concursos/$(concursoId)).data.admin_uid == request.auth.uid;
+      }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "concursos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "admin_uid", "order": "ASCENDING" },
+        { "fieldPath": "fecha_creacion", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

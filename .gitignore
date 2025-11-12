@@ -1,0 +1,20 @@
+# Excluir archivos grandes y binarios
+*.rar
+*.zip
+*.tar
+*.tar.gz
+
+# Entornos virtuales Python
+api/venv/
+
+# Configuración y secretos
+.env
+api/.env
+
+# Artefactos de build de Flutter/Dart
+**/build/
+**/.dart_tool/
+
+# Archivos temporales / SO
+.DS_Store
+Thumbs.db
