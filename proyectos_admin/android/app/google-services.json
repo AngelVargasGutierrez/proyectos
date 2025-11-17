@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "312050044667",
+    "project_id": "concursoepis",
+    "storage_bucket": "concursoepis.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:312050044667:android:d8cee526e86f72a06dea5e",
+        "android_client_info": {
+          "package_name": "com.example.concurso_admin"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "312050044667-6mc8gm1a5qb0b39pmc83pannvbvif9ql.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.concurso_admin",
+            "certificate_hash": "108df7bc5d99043cc1265a16d6ca36b8147b9b52"
+          }
+        },
+        {
+          "client_id": "312050044667-7jai4i8qipl7fnpep77h175v0e0apkh1.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDRmLn9G6RtMSyu_wwzvxpSORAWCjwkpcM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "312050044667-7jai4i8qipl7fnpep77h175v0e0apkh1.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "312050044667-16m8dkag5e5ssjn4ajj4116dc1evsfc1.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.epis.concursos"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

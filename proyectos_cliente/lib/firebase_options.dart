@@ -24,16 +24,16 @@ class DefaultFirebaseOptions {
     messagingSenderId: '312050044667',
     projectId: 'concursoepis',
     authDomain: 'concursoepis.firebaseapp.com',
-    storageBucket: 'concursoepis.appspot.com',
+    storageBucket: 'concursoepis.firebasestorage.app',
     measurementId: 'G-RVR62182XE',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'dummy-api-key',
-    appId: '1:000000000000:android:dummyappid',
-    messagingSenderId: '000000000000',
+    apiKey: 'AIzaSyDRmLn9G6RtMSyu_wwzvxpSORAWCjwkpcM',
+    appId: '1:312050044667:android:59bc6df0513e60066dea5e',
+    messagingSenderId: '312050044667',
     projectId: 'concursoepis',
-    storageBucket: 'concursoepis.appspot.com',
+    storageBucket: 'concursoepis.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(

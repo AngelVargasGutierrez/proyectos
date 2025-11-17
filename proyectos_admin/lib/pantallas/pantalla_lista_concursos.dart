@@ -47,8 +47,21 @@ class PantallaListaConcursos extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 ...concurso.categorias.map((categoria) => Padding(
-                  padding: const EdgeInsets.only(left: 8, bottom: 2),
-                  child: Text('• ${categoria.nombre}: ${categoria.rangoCiclos}'),
+                  padding: const EdgeInsets.only(left: 8, bottom: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('• ${categoria.nombre}: ${categoria.rangoCiclos}'),
+                      if (categoria.juradosAsignados.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 12, top: 2),
+                          child: Text(
+                            'Jurados: ${categoria.juradosAsignados.join(', ')}',
+                            style: const TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ),
+                    ],
+                  ),
                 )),
               ],
             ),

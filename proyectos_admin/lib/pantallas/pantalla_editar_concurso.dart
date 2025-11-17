@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../proveedores/proveedor_concursos.dart';
+import '../proveedores/proveedor_autenticacion.dart';
 import '../modelos/concurso.dart';
 import '../modelos/categoria.dart';
 
@@ -19,12 +21,84 @@ class _PantallaEditarConcursoState extends State<PantallaEditarConcurso> {
   late final TextEditingController _controladorNombre;
   final _controladorNombreCategoria = TextEditingController();
   final _controladorRangoCiclos = TextEditingController();
+  List<String> _opcionesJurados = [];
+  bool _cargandoJurados = false;
   
   late DateTime _fechaLimiteInscripcion;
   late DateTime _fechaRevision;
   late DateTime _fechaConfirmacionAceptados;
   
   late List<Categoria> _categorias;
+
+  bool _esAdminAutorizado() {
+    try {
+      final correo = Provider.of<ProveedorAutenticacion>(context, listen: false).administradorActual?.correo;
+      return (correo?.toLowerCase() ?? '') == 'admin@upt.pe';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _asignarJuradosACategoria(int index) async {
+    final categoria = _categorias[index];
+    final seleccionInicial = Set<String>.from(categoria.juradosAsignados);
+    final seleccionTemporal = Set<String>.from(seleccionInicial);
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: Text('Jurados - ${categoria.nombre}'),
+              content: SizedBox(
+                width: 400,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: _opcionesJurados.map((nombre) {
+                      final marcado = seleccionTemporal.contains(nombre);
+                      return CheckboxListTile(
+                        value: marcado,
+                        title: Text(nombre),
+                        onChanged: (v) {
+                          if (v == true) {
+                            seleccionTemporal.add(nombre);
+                          } else {
+                            seleccionTemporal.remove(nombre);
+                          }
+                          setStateDialog(() {});
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _categorias[index] = Categoria(
+                        nombre: categoria.nombre,
+                        rangoCiclos: categoria.rangoCiclos,
+                        juradosAsignados: seleccionTemporal.toList(),
+                      );
+                    });
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('Guardar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   void initState() {
@@ -34,6 +108,43 @@ class _PantallaEditarConcursoState extends State<PantallaEditarConcurso> {
     _fechaRevision = widget.concurso.fechaRevision;
     _fechaConfirmacionAceptados = widget.concurso.fechaConfirmacionAceptados;
     _categorias = List.from(widget.concurso.categorias);
+    _cargarJuradosDb();
+  }
+
+  Future<void> _cargarJuradosDb() async {
+    setState(() {
+      _cargandoJurados = true;
+    });
+    try {
+      final nombres = <String>{};
+      final qs1 = await FirebaseFirestore.instance.collection('jurado').get();
+      for (final d in qs1.docs) {
+        final data = d.data();
+        final nombre = (data['nombre'] ?? data['nombres'] ?? '') as String;
+        final apellidos = (data['apellidos'] ?? '') as String;
+        final completo = [nombre, apellidos].where((s) => s.isNotEmpty).join(' ').trim();
+        final correo = (data['correo'] ?? '') as String;
+        nombres.add((completo.isNotEmpty ? completo : correo).toUpperCase());
+      }
+      final qs2 = await FirebaseFirestore.instance.collection('jurados').get();
+      for (final d in qs2.docs) {
+        final data = d.data();
+        final nombre = (data['nombre'] ?? data['nombres'] ?? '') as String;
+        final apellidos = (data['apellidos'] ?? '') as String;
+        final completo = [nombre, apellidos].where((s) => s.isNotEmpty).join(' ').trim();
+        final correo = (data['correo'] ?? '') as String;
+        nombres.add((completo.isNotEmpty ? completo : correo).toUpperCase());
+      }
+      setState(() {
+        _opcionesJurados = nombres.toList()..sort();
+        _cargandoJurados = false;
+      });
+    } catch (_) {
+      setState(() {
+        _opcionesJurados = [];
+        _cargandoJurados = false;
+      });
+    }
   }
 
   @override
@@ -435,10 +546,34 @@ class _PantallaEditarConcursoState extends State<PantallaEditarConcurso> {
                             final categoria = _categorias[index];
                             return ListTile(
                               title: Text(categoria.nombre),
-                              subtitle: Text(categoria.rangoCiclos),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => _eliminarCategoria(index),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(categoria.rangoCiclos),
+                                  if (categoria.juradosAsignados.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Text(
+                                        'Jurados: ${categoria.juradosAsignados.join(', ')}',
+                                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (_esAdminAutorizado())
+                                    IconButton(
+                                      tooltip: 'Asignar jurados',
+                                      icon: const Icon(Icons.group_add, color: Colors.blue),
+                                      onPressed: () => _asignarJuradosACategoria(index),
+                                    ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete, color: Colors.red),
+                                    onPressed: () => _eliminarCategoria(index),
+                                  ),
+                                ],
                               ),
                             );
                           },

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../proveedores/proveedor_concursos.dart';
+import '../proveedores/proveedor_autenticacion.dart';
 import '../modelos/categoria.dart';
 
 class PantallaCrearConcurso extends StatefulWidget {
@@ -16,12 +18,87 @@ class _PantallaCrearConcursoState extends State<PantallaCrearConcurso> {
   final _controladorNombre = TextEditingController();
   final _controladorNombreCategoria = TextEditingController();
   final _controladorRangoCiclos = TextEditingController();
-  
+  List<String> _opcionesJurados = [];
+  bool _cargandoJurados = false;
+
   DateTime? _fechaLimiteInscripcion;
   DateTime? _fechaRevision;
   DateTime? _fechaConfirmacionAceptados;
-  
+
   final List<Categoria> _categorias = [];
+
+  bool _esAdminAutorizado() {
+    try {
+      final correo = Provider.of<ProveedorAutenticacion>(
+        context,
+        listen: false,
+      ).administradorActual?.correo;
+      return (correo?.toLowerCase() ?? '') == 'admin@upt.pe';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _asignarJuradosACategoria(int index) async {
+    final categoria = _categorias[index];
+    final seleccionInicial = Set<String>.from(categoria.juradosAsignados);
+    final seleccionTemporal = Set<String>.from(seleccionInicial);
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: Text('Jurados - ${categoria.nombre}'),
+              content: SizedBox(
+                width: 400,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: _opcionesJurados.map((nombre) {
+                      final marcado = seleccionTemporal.contains(nombre);
+                      return CheckboxListTile(
+                        value: marcado,
+                        title: Text(nombre),
+                        onChanged: (v) {
+                          if (v == true) {
+                            seleccionTemporal.add(nombre);
+                          } else {
+                            seleccionTemporal.remove(nombre);
+                          }
+                          setStateDialog(() {});
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _categorias[index] = Categoria(
+                        nombre: categoria.nombre,
+                        rangoCiclos: categoria.rangoCiclos,
+                        juradosAsignados: seleccionTemporal.toList(),
+                      );
+                    });
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('Guardar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   void dispose() {
@@ -65,7 +142,9 @@ class _PantallaCrearConcursoState extends State<PantallaCrearConcurso> {
 
     if (nombreCategoria.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor ingrese el nombre de la categoria')),
+        const SnackBar(
+          content: Text('Por favor ingrese el nombre de la categoria'),
+        ),
       );
       return;
     }
@@ -78,7 +157,9 @@ class _PantallaCrearConcursoState extends State<PantallaCrearConcurso> {
     }
 
     // Verificar que no exista una categoria con el mismo nombre
-    if (_categorias.any((cat) => cat.nombre.toLowerCase() == nombreCategoria.toLowerCase())) {
+    if (_categorias.any(
+      (cat) => cat.nombre.toLowerCase() == nombreCategoria.toLowerCase(),
+    )) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Ya existe una categoria con ese nombre')),
       );
@@ -86,10 +167,9 @@ class _PantallaCrearConcursoState extends State<PantallaCrearConcurso> {
     }
 
     setState(() {
-      _categorias.add(Categoria(
-        nombre: nombreCategoria,
-        rangoCiclos: rangoCiclos,
-      ));
+      _categorias.add(
+        Categoria(nombre: nombreCategoria, rangoCiclos: rangoCiclos),
+      );
       _controladorNombreCategoria.clear();
       _controladorRangoCiclos.clear();
     });
@@ -112,7 +192,7 @@ class _PantallaCrearConcursoState extends State<PantallaCrearConcurso> {
   Future<void> _crearConcurso() async {
     if (_formKey.currentState!.validate() && _validarDatos()) {
       final proveedor = Provider.of<ProveedorConcursos>(context, listen: false);
-      
+
       final exito = await proveedor.crearConcurso(
         nombre: _controladorNombre.text.trim(),
         categorias: _categorias,
@@ -136,7 +216,9 @@ class _PantallaCrearConcursoState extends State<PantallaCrearConcurso> {
   bool _validarDatos() {
     if (_fechaLimiteInscripcion == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleccione la fecha limite de inscripcion')),
+        const SnackBar(
+          content: Text('Seleccione la fecha limite de inscripcion'),
+        ),
       );
       return false;
     }
@@ -148,7 +230,9 @@ class _PantallaCrearConcursoState extends State<PantallaCrearConcurso> {
     }
     if (_fechaConfirmacionAceptados == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleccione la fecha de confirmacion de aceptados')),
+        const SnackBar(
+          content: Text('Seleccione la fecha de confirmacion de aceptados'),
+        ),
       );
       return false;
     }
@@ -160,13 +244,21 @@ class _PantallaCrearConcursoState extends State<PantallaCrearConcurso> {
     }
     if (_fechaRevision!.isBefore(_fechaLimiteInscripcion!)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('La fecha de revision debe ser posterior a la fecha limite de inscripcion')),
+        const SnackBar(
+          content: Text(
+            'La fecha de revision debe ser posterior a la fecha limite de inscripcion',
+          ),
+        ),
       );
       return false;
     }
     if (_fechaConfirmacionAceptados!.isBefore(_fechaRevision!)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('La fecha de confirmacion debe ser posterior a la fecha de revision')),
+        const SnackBar(
+          content: Text(
+            'La fecha de confirmacion debe ser posterior a la fecha de revision',
+          ),
+        ),
       );
       return false;
     }
@@ -220,9 +312,9 @@ class _PantallaCrearConcursoState extends State<PantallaCrearConcurso> {
               const SizedBox(height: 20),
               Text(
                 'Fechas del Concurso',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
               ElevatedButton.icon(
@@ -234,20 +326,33 @@ class _PantallaCrearConcursoState extends State<PantallaCrearConcurso> {
                   children: [
                     const Text(
                       'Limite de Inscripcion',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.normal,
+                      ),
                     ),
                     Text(
                       _fechaLimiteInscripcion != null
                           ? formatoFecha.format(_fechaLimiteInscripcion!)
                           : 'Toque para seleccionar',
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _fechaLimiteInscripcion != null ? Colors.blue[100] : Colors.grey[200],
-                  foregroundColor: _fechaLimiteInscripcion != null ? Colors.blue[800] : Colors.grey[600],
-                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                  backgroundColor: _fechaLimiteInscripcion != null
+                      ? Colors.blue[100]
+                      : Colors.grey[200],
+                  foregroundColor: _fechaLimiteInscripcion != null
+                      ? Colors.blue[800]
+                      : Colors.grey[600],
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 16,
+                    horizontal: 16,
+                  ),
                   alignment: Alignment.centerLeft,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -265,20 +370,33 @@ class _PantallaCrearConcursoState extends State<PantallaCrearConcurso> {
                   children: [
                     const Text(
                       'Fecha de Revision',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.normal,
+                      ),
                     ),
                     Text(
                       _fechaRevision != null
                           ? formatoFecha.format(_fechaRevision!)
                           : 'Toque para seleccionar',
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _fechaRevision != null ? Colors.green[100] : Colors.grey[200],
-                  foregroundColor: _fechaRevision != null ? Colors.green[800] : Colors.grey[600],
-                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                  backgroundColor: _fechaRevision != null
+                      ? Colors.green[100]
+                      : Colors.grey[200],
+                  foregroundColor: _fechaRevision != null
+                      ? Colors.green[800]
+                      : Colors.grey[600],
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 16,
+                    horizontal: 16,
+                  ),
                   alignment: Alignment.centerLeft,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -296,20 +414,33 @@ class _PantallaCrearConcursoState extends State<PantallaCrearConcurso> {
                   children: [
                     const Text(
                       'Confirmacion de Aceptados',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.normal,
+                      ),
                     ),
                     Text(
                       _fechaConfirmacionAceptados != null
                           ? formatoFecha.format(_fechaConfirmacionAceptados!)
                           : 'Toque para seleccionar',
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _fechaConfirmacionAceptados != null ? Colors.orange[100] : Colors.grey[200],
-                  foregroundColor: _fechaConfirmacionAceptados != null ? Colors.orange[800] : Colors.grey[600],
-                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                  backgroundColor: _fechaConfirmacionAceptados != null
+                      ? Colors.orange[100]
+                      : Colors.grey[200],
+                  foregroundColor: _fechaConfirmacionAceptados != null
+                      ? Colors.orange[800]
+                      : Colors.grey[600],
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 16,
+                    horizontal: 16,
+                  ),
                   alignment: Alignment.centerLeft,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -320,9 +451,9 @@ class _PantallaCrearConcursoState extends State<PantallaCrearConcurso> {
               const SizedBox(height: 20),
               Text(
                 'Categorias del Concurso',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
               Column(
@@ -407,15 +538,50 @@ class _PantallaCrearConcursoState extends State<PantallaCrearConcurso> {
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: _categorias.length,
-                        separatorBuilder: (context, index) => const Divider(height: 1),
+                        separatorBuilder: (context, index) =>
+                            const Divider(height: 1),
                         itemBuilder: (context, index) {
                           final categoria = _categorias[index];
                           return ListTile(
                             title: Text(categoria.nombre),
-                            subtitle: Text(categoria.rangoCiclos),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => _eliminarCategoria(index),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(categoria.rangoCiclos),
+                                if (categoria.juradosAsignados.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Text(
+                                      'Jurados: ${categoria.juradosAsignados.join(', ')}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (_esAdminAutorizado())
+                                  IconButton(
+                                    tooltip: 'Asignar jurados',
+                                    icon: const Icon(
+                                      Icons.group_add,
+                                      color: Colors.blue,
+                                    ),
+                                    onPressed: () =>
+                                        _asignarJuradosACategoria(index),
+                                  ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.delete,
+                                    color: Colors.red,
+                                  ),
+                                  onPressed: () => _eliminarCategoria(index),
+                                ),
+                              ],
                             ),
                           );
                         },
@@ -471,7 +637,9 @@ class _PantallaCrearConcursoState extends State<PantallaCrearConcurso> {
                             width: 20,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
                             ),
                           )
                         : const Text(
@@ -487,5 +655,52 @@ class _PantallaCrearConcursoState extends State<PantallaCrearConcurso> {
         ),
       ),
     );
+  }
+  @override
+  void initState() {
+    super.initState();
+    _cargarJuradosDb();
+  }
+
+  Future<void> _cargarJuradosDb() async {
+    setState(() {
+      _cargandoJurados = true;
+    });
+    try {
+      final nombres = <String>{};
+      final qs1 = await FirebaseFirestore.instance.collection('jurado').get();
+      for (final d in qs1.docs) {
+        final data = d.data();
+        final nombre = (data['nombre'] ?? data['nombres'] ?? '') as String;
+        final apellidos = (data['apellidos'] ?? '') as String;
+        final completo = [nombre, apellidos]
+            .where((s) => s.isNotEmpty)
+            .join(' ')
+            .trim();
+        final correo = (data['correo'] ?? '') as String;
+        nombres.add((completo.isNotEmpty ? completo : correo).toUpperCase());
+      }
+      final qs2 = await FirebaseFirestore.instance.collection('jurados').get();
+      for (final d in qs2.docs) {
+        final data = d.data();
+        final nombre = (data['nombre'] ?? data['nombres'] ?? '') as String;
+        final apellidos = (data['apellidos'] ?? '') as String;
+        final completo = [nombre, apellidos]
+            .where((s) => s.isNotEmpty)
+            .join(' ')
+            .trim();
+        final correo = (data['correo'] ?? '') as String;
+        nombres.add((completo.isNotEmpty ? completo : correo).toUpperCase());
+      }
+      setState(() {
+        _opcionesJurados = nombres.toList()..sort();
+        _cargandoJurados = false;
+      });
+    } catch (_) {
+      setState(() {
+        _opcionesJurados = [];
+        _cargandoJurados = false;
+      });
+    }
   }
 }

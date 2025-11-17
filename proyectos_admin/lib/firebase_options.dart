@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/foundation.dart'
+    show kIsWeb, defaultTargetPlatform, TargetPlatform;
 
 /// Archivo temporal de opciones de Firebase para compilar sin configurar FlutterFire.
 /// Reemplaza estos valores con los reales cuando completes la configuración.
@@ -13,8 +14,12 @@ class DefaultFirebaseOptions {
         return ios;
       case TargetPlatform.macOS:
         return macos;
+      case TargetPlatform.windows:
+        return web;
+      case TargetPlatform.linux:
+        return web;
       default:
-        return android; // Fallback a Android
+        return web;
     }
   }
 
