@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../proveedores/proveedor_concursos.dart';
 import '../proveedores/proveedor_autenticacion.dart';
 import '../modelos/categoria.dart';
+import '../modelos/administrador.dart';
 
 class PantallaCrearConcurso extends StatefulWidget {
   const PantallaCrearConcurso({super.key});
@@ -29,11 +30,12 @@ class _PantallaCrearConcursoState extends State<PantallaCrearConcurso> {
 
   bool _esAdminAutorizado() {
     try {
-      final correo = Provider.of<ProveedorAutenticacion>(
+      final admin = Provider.of<ProveedorAutenticacion>(
         context,
         listen: false,
-      ).administradorActual?.correo;
-      return (correo?.toLowerCase() ?? '') == 'admin@upt.pe';
+      ).administradorActual;
+      // Permitir a cualquier administrador asignar jurados
+      return admin?.rol == RolUsuario.administrador;
     } catch (_) {
       return false;
     }
