@@ -6,6 +6,7 @@ import '../modelos/administrador.dart';
 import 'pantalla_inicio_sesion.dart';
 import 'pantalla_crear_concurso.dart';
 import 'pantalla_lista_concursos.dart';
+import 'pantalla_gestion_usuarios.dart';
 
 class PantallaPrincipal extends StatefulWidget {
   const PantallaPrincipal({super.key});
@@ -79,6 +80,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
                 onSelected: (value) {
                   if (value == 'cerrar_sesion') {
                     _cerrarSesion();
+                  } else if (value == 'gestion_usuarios') {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (context) => const PantallaGestionUsuarios()),
+                    );
                   }
                 },
                 itemBuilder: (BuildContext context) => [
@@ -105,6 +110,19 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
                     ),
                   ),
                   const PopupMenuDivider(),
+                  if (proveedor.administradorActual?.rol == RolUsuario.administrador)
+                    const PopupMenuItem<String>(
+                      value: 'gestion_usuarios',
+                      child: Row(
+                        children: [
+                          Icon(Icons.people, color: Colors.blue),
+                          SizedBox(width: 8),
+                          Text('Gestión de Usuarios'),
+                        ],
+                      ),
+                    ),
+                  if (proveedor.administradorActual?.rol == RolUsuario.administrador)
+                    const PopupMenuDivider(),
                   const PopupMenuItem<String>(
                     value: 'cerrar_sesion',
                     child: Row(

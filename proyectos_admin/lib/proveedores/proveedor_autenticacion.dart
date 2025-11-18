@@ -83,6 +83,29 @@ class ProveedorAutenticacion extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> iniciarSesionConMicrosoft() async {
+    _cargando = true;
+    _mensajeError = null;
+    notifyListeners();
+
+    try {
+      final exito = await _servicioAuth.iniciarSesionConMicrosoft();
+
+      if (!exito) {
+        _mensajeError = 'No tienes permiso para acceder o cancelaste el inicio de sesión';
+      }
+
+      _cargando = false;
+      notifyListeners();
+      return exito;
+    } catch (e) {
+      _mensajeError = 'Error al iniciar sesión con Microsoft';
+      _cargando = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   void limpiarError() {
     _mensajeError = null;
     notifyListeners();

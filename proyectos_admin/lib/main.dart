@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'proveedores/proveedor_autenticacion.dart';
 import 'proveedores/proveedor_concursos.dart';
 import 'proveedores/proveedor_proyectos.dart';
+import 'proveedores/proveedor_usuarios.dart';
 import 'pantallas/pantalla_inicio_sesion.dart';
 import 'pantallas/pantalla_principal.dart';
 
@@ -29,6 +30,7 @@ class AdminProyectosApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ProveedorAutenticacion()),
         ChangeNotifierProvider(create: (_) => ProveedorConcursos()),
         ChangeNotifierProvider(create: (_) => ProveedorProyectos()),
+        ChangeNotifierProvider(create: (_) => ProveedorUsuarios()),
       ],
       child: MaterialApp(
         title: 'Admin Proyectos EPIS',

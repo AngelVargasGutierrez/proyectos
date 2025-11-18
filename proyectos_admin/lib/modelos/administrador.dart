@@ -3,6 +3,11 @@ enum RolUsuario {
   jurado,
 }
 
+enum MetodoAutenticacion {
+  email,
+  microsoft,
+}
+
 class Administrador {
   final String id;
   final String nombres;
@@ -10,6 +15,7 @@ class Administrador {
   final String correo;
   final String numeroTelefonico;
   final RolUsuario rol;
+  final MetodoAutenticacion metodoAutenticacion;
 
   Administrador({
     required this.id,
@@ -18,6 +24,7 @@ class Administrador {
     required this.correo,
     required this.numeroTelefonico,
     required this.rol,
+    this.metodoAutenticacion = MetodoAutenticacion.email,
   });
 
   Map<String, dynamic> aJson() {
@@ -28,6 +35,7 @@ class Administrador {
       'correo': correo,
       'numeroTelefonico': numeroTelefonico,
       'rol': rol.name,
+      'metodoAutenticacion': metodoAutenticacion.name,
     };
   }
 
@@ -39,6 +47,7 @@ class Administrador {
       correo: json['correo'],
       numeroTelefonico: json['numeroTelefonico'],
       rol: _rolFromString(json['rol'] ?? 'administrador'),
+      metodoAutenticacion: _metodoFromString(json['metodoAutenticacion'] ?? 'email'),
     );
   }
 
@@ -50,6 +59,15 @@ class Administrador {
         return RolUsuario.jurado;
       default:
         return RolUsuario.administrador;
+    }
+  }
+
+  static MetodoAutenticacion _metodoFromString(String s) {
+    switch (s.toLowerCase()) {
+      case 'microsoft':
+        return MetodoAutenticacion.microsoft;
+      default:
+        return MetodoAutenticacion.email;
     }
   }
 }

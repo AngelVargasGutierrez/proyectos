@@ -41,6 +41,18 @@ class _PantallaInicioSesionState extends State<PantallaInicioSesion> {
     }
   }
 
+  Future<void> _iniciarSesionConMicrosoft() async {
+    final proveedor = Provider.of<ProveedorAutenticacion>(context, listen: false);
+
+    final exito = await proveedor.iniciarSesionConMicrosoft();
+
+    if (exito && mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const PantallaPrincipal()),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -168,6 +180,37 @@ class _PantallaInicioSesionState extends State<PantallaInicioSesion> {
                             'Iniciar Sesion',
                             style: TextStyle(fontSize: 16),
                           ),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              const Row(
+                children: [
+                  Expanded(child: Divider()),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: Text('O'),
+                  ),
+                  Expanded(child: Divider()),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Consumer<ProveedorAutenticacion>(
+                builder: (context, proveedor, child) {
+                  return OutlinedButton.icon(
+                    onPressed: proveedor.cargando ? null : _iniciarSesionConMicrosoft,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      side: BorderSide(color: Colors.blue[700]!),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    icon: Icon(Icons.business, color: Colors.blue[700]),
+                    label: Text(
+                      'Iniciar sesión con Microsoft',
+                      style: TextStyle(fontSize: 16, color: Colors.blue[700]),
+                    ),
                   );
                 },
               ),

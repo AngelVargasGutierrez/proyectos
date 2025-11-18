@@ -27,6 +27,7 @@ class ServicioAutenticacion {
       final adminDoc = await FirebaseFirestore.instance.collection('administradores').doc(uid).get();
       if (adminDoc.exists) {
         final data = adminDoc.data() ?? <String, dynamic>{};
+        final metodo = data['metodoAutenticacion'] ?? 'email';
         _administradorActual = Administrador(
           id: uid,
           nombres: (data['nombres'] ?? '') as String,
@@ -34,6 +35,7 @@ class ServicioAutenticacion {
           correo: (data['correo'] ?? correo.trim()) as String,
           numeroTelefonico: (data['numeroTelefonico'] ?? '') as String,
           rol: RolUsuario.administrador,
+          metodoAutenticacion: metodo == 'microsoft' ? MetodoAutenticacion.microsoft : MetodoAutenticacion.email,
         );
         return true;
       }
@@ -43,6 +45,7 @@ class ServicioAutenticacion {
       final juradoDocUid = await FirebaseFirestore.instance.collection('jurados').doc(uid).get();
       if (juradoDocUid.exists) {
         final data = juradoDocUid.data() ?? <String, dynamic>{};
+        final metodo = data['metodoAutenticacion'] ?? 'email';
         _administradorActual = Administrador(
           id: uid,
           nombres: (data['nombres'] ?? data['nombre'] ?? '') as String,
@@ -50,6 +53,7 @@ class ServicioAutenticacion {
           correo: (data['correo'] ?? correo.trim()) as String,
           numeroTelefonico: (data['numeroTelefonico'] ?? '') as String,
           rol: RolUsuario.jurado,
+          metodoAutenticacion: metodo == 'microsoft' ? MetodoAutenticacion.microsoft : MetodoAutenticacion.email,
         );
         return true;
       }
@@ -58,6 +62,7 @@ class ServicioAutenticacion {
       final juradoDocUidSing = await FirebaseFirestore.instance.collection('jurado').doc(uid).get();
       if (juradoDocUidSing.exists) {
         final data = juradoDocUidSing.data() ?? <String, dynamic>{};
+        final metodo = data['metodoAutenticacion'] ?? 'email';
         _administradorActual = Administrador(
           id: uid,
           nombres: (data['nombres'] ?? data['nombre'] ?? '') as String,
@@ -65,6 +70,7 @@ class ServicioAutenticacion {
           correo: (data['correo'] ?? correo.trim()) as String,
           numeroTelefonico: (data['numeroTelefonico'] ?? '') as String,
           rol: RolUsuario.jurado,
+          metodoAutenticacion: metodo == 'microsoft' ? MetodoAutenticacion.microsoft : MetodoAutenticacion.email,
         );
         return true;
       }
@@ -77,6 +83,7 @@ class ServicioAutenticacion {
           .get();
       if (qsJuradoSing.docs.isNotEmpty) {
         final data = qsJuradoSing.docs.first.data();
+        final metodo = data['metodoAutenticacion'] ?? 'email';
         _administradorActual = Administrador(
           id: uid,
           nombres: (data['nombres'] ?? data['nombre'] ?? '') as String,
@@ -84,6 +91,7 @@ class ServicioAutenticacion {
           correo: (data['correo'] ?? correo.trim()) as String,
           numeroTelefonico: (data['numeroTelefonico'] ?? '') as String,
           rol: RolUsuario.jurado,
+          metodoAutenticacion: metodo == 'microsoft' ? MetodoAutenticacion.microsoft : MetodoAutenticacion.email,
         );
         return true;
       }
@@ -96,6 +104,7 @@ class ServicioAutenticacion {
           .get();
       if (qsJurado.docs.isNotEmpty) {
         final data = qsJurado.docs.first.data();
+        final metodo = data['metodoAutenticacion'] ?? 'email';
         _administradorActual = Administrador(
           id: uid,
           nombres: (data['nombres'] ?? data['nombre'] ?? '') as String,
@@ -103,6 +112,7 @@ class ServicioAutenticacion {
           correo: (data['correo'] ?? correo.trim()) as String,
           numeroTelefonico: (data['numeroTelefonico'] ?? '') as String,
           rol: RolUsuario.jurado,
+          metodoAutenticacion: metodo == 'microsoft' ? MetodoAutenticacion.microsoft : MetodoAutenticacion.email,
         );
         return true;
       }
@@ -134,6 +144,7 @@ class ServicioAutenticacion {
         'correo': correo.trim(),
         'numeroTelefonico': numeroTelefonico.trim(),
         'rol': 'administrador',
+        'metodoAutenticacion': 'email',
       });
 
       _administradorActual = Administrador(
@@ -143,6 +154,7 @@ class ServicioAutenticacion {
         correo: correo.trim(),
         numeroTelefonico: numeroTelefonico.trim(),
         rol: RolUsuario.administrador,
+        metodoAutenticacion: MetodoAutenticacion.email,
       );
       return true;
     } catch (e) {
@@ -184,5 +196,95 @@ class ServicioAutenticacion {
   void cerrarSesion() {
     _administradorActual = null;
     FirebaseAuth.instance.signOut();
+  }
+
+  Future<bool> iniciarSesionConMicrosoft() async {
+    try {
+      // Configurar Microsoft Provider
+      final microsoftProvider = MicrosoftAuthProvider();
+      microsoftProvider.setCustomParameters({
+        'tenant': 'common', // Permite cuentas personales y organizacionales
+      });
+
+      // Iniciar flujo de autenticación con Microsoft
+      final userCred = await FirebaseAuth.instance.signInWithProvider(microsoftProvider);
+      final uid = userCred.user?.uid;
+      final correo = userCred.user?.email;
+      if (uid == null || correo == null) return false;
+
+      // Verificar si el correo está en la lista de usuarios permitidos
+      // Buscar en administradores
+      final adminDoc = await FirebaseFirestore.instance.collection('administradores').doc(uid).get();
+      if (adminDoc.exists) {
+        final data = adminDoc.data() ?? <String, dynamic>{};
+        // Verificar que el método de autenticación sea Microsoft
+        final metodo = data['metodoAutenticacion'] ?? '';
+        if (metodo != 'microsoft') {
+          await FirebaseAuth.instance.signOut();
+          return false;
+        }
+        
+        _administradorActual = Administrador(
+          id: uid,
+          nombres: (data['nombres'] ?? '') as String,
+          apellidos: (data['apellidos'] ?? '') as String,
+          correo: correo,
+          numeroTelefonico: (data['numeroTelefonico'] ?? '') as String,
+          rol: RolUsuario.administrador,
+          metodoAutenticacion: MetodoAutenticacion.microsoft,
+        );
+        return true;
+      }
+
+      // Buscar en colección de correos permitidos (administradores)
+      final adminQuery = await FirebaseFirestore.instance
+          .collection('administradores')
+          .where('correo', isEqualTo: correo.trim())
+          .where('metodoAutenticacion', isEqualTo: 'microsoft')
+          .limit(1)
+          .get();
+      
+      if (adminQuery.docs.isNotEmpty) {
+        final data = adminQuery.docs.first.data();
+        _administradorActual = Administrador(
+          id: uid,
+          nombres: (data['nombres'] ?? '') as String,
+          apellidos: (data['apellidos'] ?? '') as String,
+          correo: correo,
+          numeroTelefonico: (data['numeroTelefonico'] ?? '') as String,
+          rol: RolUsuario.administrador,
+          metodoAutenticacion: MetodoAutenticacion.microsoft,
+        );
+        return true;
+      }
+
+      // Buscar en jurados
+      final juradoQuery = await FirebaseFirestore.instance
+          .collection('jurados')
+          .where('correo', isEqualTo: correo.trim())
+          .where('metodoAutenticacion', isEqualTo: 'microsoft')
+          .limit(1)
+          .get();
+      
+      if (juradoQuery.docs.isNotEmpty) {
+        final data = juradoQuery.docs.first.data();
+        _administradorActual = Administrador(
+          id: uid,
+          nombres: (data['nombres'] ?? data['nombre'] ?? '') as String,
+          apellidos: (data['apellidos'] ?? '') as String,
+          correo: correo,
+          numeroTelefonico: (data['numeroTelefonico'] ?? '') as String,
+          rol: RolUsuario.jurado,
+          metodoAutenticacion: MetodoAutenticacion.microsoft,
+        );
+        return true;
+      }
+
+      // Si no está en ninguna lista, rechazar acceso
+      await FirebaseAuth.instance.signOut();
+      return false;
+    } catch (e) {
+      return false;
+    }
   }
 }
