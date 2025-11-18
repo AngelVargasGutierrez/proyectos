@@ -40,7 +40,7 @@ class ServicioAutenticacion {
         return true;
       }
 
-      // Intentar cargar como jurado (soporta 'jurados' y 'jurado' y búsqueda por correo)
+      // Intentar cargar como jurado
       // 1) Por UID en 'jurados'
       final juradoDocUid = await FirebaseFirestore.instance.collection('jurados').doc(uid).get();
       if (juradoDocUid.exists) {
@@ -58,45 +58,7 @@ class ServicioAutenticacion {
         return true;
       }
 
-      // 2) Por UID en 'jurado' (singular)
-      final juradoDocUidSing = await FirebaseFirestore.instance.collection('jurado').doc(uid).get();
-      if (juradoDocUidSing.exists) {
-        final data = juradoDocUidSing.data() ?? <String, dynamic>{};
-        final metodo = data['metodoAutenticacion'] ?? 'email';
-        _administradorActual = Administrador(
-          id: uid,
-          nombres: (data['nombres'] ?? data['nombre'] ?? '') as String,
-          apellidos: (data['apellidos'] ?? '') as String,
-          correo: (data['correo'] ?? correo.trim()) as String,
-          numeroTelefonico: (data['numeroTelefonico'] ?? '') as String,
-          rol: RolUsuario.jurado,
-          metodoAutenticacion: metodo == 'microsoft' ? MetodoAutenticacion.microsoft : MetodoAutenticacion.email,
-        );
-        return true;
-      }
-
-      // 3) Por correo en 'jurado' (singular)
-      final qsJuradoSing = await FirebaseFirestore.instance
-          .collection('jurado')
-          .where('correo', isEqualTo: correo.trim())
-          .limit(1)
-          .get();
-      if (qsJuradoSing.docs.isNotEmpty) {
-        final data = qsJuradoSing.docs.first.data();
-        final metodo = data['metodoAutenticacion'] ?? 'email';
-        _administradorActual = Administrador(
-          id: uid,
-          nombres: (data['nombres'] ?? data['nombre'] ?? '') as String,
-          apellidos: (data['apellidos'] ?? '') as String,
-          correo: (data['correo'] ?? correo.trim()) as String,
-          numeroTelefonico: (data['numeroTelefonico'] ?? '') as String,
-          rol: RolUsuario.jurado,
-          metodoAutenticacion: metodo == 'microsoft' ? MetodoAutenticacion.microsoft : MetodoAutenticacion.email,
-        );
-        return true;
-      }
-
-      // 4) Por correo en 'jurados' (plural)
+      // 2) Por correo en 'jurados'
       final qsJurado = await FirebaseFirestore.instance
           .collection('jurados')
           .where('correo', isEqualTo: correo.trim())
@@ -183,10 +145,10 @@ class ServicioAutenticacion {
         'correo': correo.trim(),
         'numeroTelefonico': numeroTelefonico.trim(),
         'rol': 'jurado',
+        'metodoAutenticacion': 'email',
       };
-      // Guardar en ambas colecciones para compatibilidad
+      // Guardar solo en colección 'jurados' unificada
       await FirebaseFirestore.instance.collection('jurados').doc(uid).set(payload);
-      await FirebaseFirestore.instance.collection('jurado').doc(uid).set(payload);
       return true;
     } catch (e) {
       return false;

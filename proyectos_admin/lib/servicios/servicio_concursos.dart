@@ -248,8 +248,9 @@ Future<List<String>> _resolverUidsJurados(List<String> nombres) async {
   final result = <String>[];
   final norm = nombres.map((n) => n.trim().toUpperCase()).toList();
   try {
-    final coll1 = await FirebaseFirestore.instance.collection('jurado').get();
-    for (final d in coll1.docs) {
+    // Cargar solo de colección 'jurados' unificada
+    final coll = await FirebaseFirestore.instance.collection('jurados').get();
+    for (final d in coll.docs) {
       final data = d.data();
       final nombre = ((data['nombre'] ?? data['nombres'] ?? '') as String)
           .toUpperCase();
@@ -259,18 +260,6 @@ Future<List<String>> _resolverUidsJurados(List<String> nombres) async {
         apellidos,
       ].where((s) => s.isNotEmpty).join(' ').trim();
       if (norm.contains(completo)) result.add(d.id);
-    }
-    final coll2 = await FirebaseFirestore.instance.collection('jurados').get();
-    for (final d in coll2.docs) {
-      final data = d.data();
-      final nombre = ((data['nombre'] ?? data['nombres'] ?? '') as String)
-          .toUpperCase();
-      final apellidos = ((data['apellidos'] ?? '') as String).toUpperCase();
-      final completo = [
-        nombre,
-        apellidos,
-      ].where((s) => s.isNotEmpty).join(' ').trim();
-      if (norm.contains(completo) && !result.contains(d.id)) result.add(d.id);
     }
   } catch (_) {}
   return result;

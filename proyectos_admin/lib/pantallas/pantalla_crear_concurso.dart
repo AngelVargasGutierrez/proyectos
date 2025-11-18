@@ -670,20 +670,9 @@ class _PantallaCrearConcursoState extends State<PantallaCrearConcurso> {
     });
     try {
       final nombres = <String>{};
-      final qs1 = await FirebaseFirestore.instance.collection('jurado').get();
-      for (final d in qs1.docs) {
-        final data = d.data();
-        final nombre = (data['nombre'] ?? data['nombres'] ?? '') as String;
-        final apellidos = (data['apellidos'] ?? '') as String;
-        final completo = [nombre, apellidos]
-            .where((s) => s.isNotEmpty)
-            .join(' ')
-            .trim();
-        final correo = (data['correo'] ?? '') as String;
-        nombres.add((completo.isNotEmpty ? completo : correo).toUpperCase());
-      }
-      final qs2 = await FirebaseFirestore.instance.collection('jurados').get();
-      for (final d in qs2.docs) {
+      // Cargar solo de colección 'jurados' unificada
+      final qs = await FirebaseFirestore.instance.collection('jurados').get();
+      for (final d in qs.docs) {
         final data = d.data();
         final nombre = (data['nombre'] ?? data['nombres'] ?? '') as String;
         final apellidos = (data['apellidos'] ?? '') as String;

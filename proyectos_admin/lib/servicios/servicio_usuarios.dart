@@ -40,11 +40,6 @@ class ServicioUsuarios {
       final docId = correo.trim().replaceAll('@', '_at_').replaceAll('.', '_dot_');
       await FirebaseFirestore.instance.collection(coleccion).doc(docId).set(datos);
 
-      // Si es jurado, también guardar en la colección alternativa para compatibilidad
-      if (rol == RolUsuario.jurado) {
-        await FirebaseFirestore.instance.collection('jurado').doc(docId).set(datos);
-      }
-
       return true;
     } catch (e) {
       return false;
@@ -71,15 +66,6 @@ class ServicioUsuarios {
           .get();
       
       if (juradosQuery.docs.isNotEmpty) return true;
-
-      // Buscar en jurado (singular)
-      final juradoQuery = await FirebaseFirestore.instance
-          .collection('jurado')
-          .where('correo', isEqualTo: correo)
-          .limit(1)
-          .get();
-      
-      if (juradoQuery.docs.isNotEmpty) return true;
 
       return false;
     } catch (e) {
@@ -121,11 +107,6 @@ class ServicioUsuarios {
       final coleccion = rol == RolUsuario.administrador ? 'administradores' : 'jurados';
       
       await FirebaseFirestore.instance.collection(coleccion).doc(docId).delete();
-
-      // Si es jurado, también eliminar de la colección alternativa
-      if (rol == RolUsuario.jurado) {
-        await FirebaseFirestore.instance.collection('jurado').doc(docId).delete();
-      }
 
       return true;
     } catch (e) {

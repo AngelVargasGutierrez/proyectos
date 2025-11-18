@@ -119,10 +119,8 @@ class _PantallaDetalleProyectoState extends State<PantallaDetalleProyecto> {
     try {
       final nombres = <String>[];
       for (final uid in uids) {
-        DocumentSnapshot<Map<String, dynamic>> doc = await FirebaseFirestore.instance.collection('jurados').doc(uid).get();
-        if (!doc.exists) {
-          doc = await FirebaseFirestore.instance.collection('jurado').doc(uid).get();
-        }
+        // Buscar solo en colección 'jurados' unificada
+        final doc = await FirebaseFirestore.instance.collection('jurados').doc(uid).get();
         final data = doc.data() ?? <String, dynamic>{};
         final nombre = (data['nombre'] ?? data['nombres'] ?? '') as String;
         final apellidos = (data['apellidos'] ?? '') as String;
