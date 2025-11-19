@@ -157,6 +157,18 @@ class ServicioConcursos {
           descargaUrl = await storageRef.getDownloadURL();
         }
 
+        String categoriaNombre = '';
+        try {
+          final catDoc = await FirebaseFirestore.instance
+              .collection('concursos')
+              .doc(concursoId)
+              .collection('categorias')
+              .doc(categoriaId)
+              .get();
+          final cData = catDoc.data() ?? <String, dynamic>{};
+          categoriaNombre = (cData['nombre'] ?? '') as String;
+        } catch (_) {}
+
         final data = {
           'nombre': nombreProyecto.trim(),
           'enlace_github': enlaceGithub.trim(),
@@ -166,6 +178,9 @@ class ServicioConcursos {
           'concurso_id': concursoId,
           'categoria_id': categoriaId,
         };
+        if (categoriaNombre.isNotEmpty) {
+          data['categoria_nombre'] = categoriaNombre;
+        }
         if (descargaUrl != null) {
           data['archivo_zip'] = descargaUrl;
           if (archivoZipNombre != null) {

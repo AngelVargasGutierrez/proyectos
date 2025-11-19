@@ -70,6 +70,8 @@ class ServicioConcursos {
           categorias = cats.docs
               .map(
                 (c) => Categoria(
+                  id: c.id,
+                  concursoId: doc.id,
                   nombre: (c.data()['nombre'] ?? '') as String,
                   rangoCiclos: (c.data()['rango_ciclos'] ?? '') as String,
                   juradosAsignados:
@@ -128,6 +130,8 @@ class ServicioConcursos {
           categorias = cats.docs
               .map(
                 (c) => Categoria(
+                  id: c.id,
+                  concursoId: doc.id,
                   nombre: (c.data()['nombre'] ?? '') as String,
                   rangoCiclos: (c.data()['rango_ciclos'] ?? '') as String,
                   juradosAsignados:
@@ -248,18 +252,34 @@ Future<List<String>> _resolverUidsJurados(List<String> nombres) async {
   final result = <String>[];
   final norm = nombres.map((n) => n.trim().toUpperCase()).toList();
   try {
-    // Cargar solo de colección 'jurados' unificada
-    final coll = await FirebaseFirestore.instance.collection('jurados').get();
-    for (final d in coll.docs) {
+    // Buscar en colección 'jurado' (singular)
+    final coll1 = await FirebaseFirestore.instance.collection('jurado').get();
+    for (final d in coll1.docs) {
       final data = d.data();
-      final nombre = ((data['nombre'] ?? data['nombres'] ?? '') as String)
-          .toUpperCase();
+      final nombre = ((data['nombre'] ?? data['nombres'] ?? '') as String).toUpperCase();
       final apellidos = ((data['apellidos'] ?? '') as String).toUpperCase();
-      final completo = [
-        nombre,
-        apellidos,
-      ].where((s) => s.isNotEmpty).join(' ').trim();
+      final completo = [nombre, apellidos].where((s) => s.isNotEmpty).join(' ').trim();
       if (norm.contains(completo)) result.add(d.id);
+    }
+    // Buscar en colección 'jurados' (plural)
+    final coll2 = await FirebaseFirestore.instance.collection('jurados').get();
+    for (final d in coll2.docs) {
+      final data = d.data();
+      final nombre = ((data['nombre'] ?? data['nombres'] ?? '') as String).toUpperCase();
+      final apellidos = ((data['apellidos'] ?? '') as String).toUpperCase();
+      final completo = [nombre, apellidos].where((s) => s.isNotEmpty).join(' ').trim();
+      if (norm.contains(completo) && !result.contains(d.id)) result.add(d.id);
+    }
+    // Buscar también en 'administradores' con rol jurado
+    final coll3 = await FirebaseFirestore.instance.collection('administradores').get();
+    for (final d in coll3.docs) {
+      final data = d.data();
+      final rol = ((data['rol'] ?? data['tipo'] ?? '') as String).toUpperCase();
+      if (rol != 'JURADO') continue;
+      final nombre = ((data['nombres'] ?? data['nombre'] ?? '') as String).toUpperCase();
+      final apellidos = ((data['apellidos'] ?? '') as String).toUpperCase();
+      final completo = [nombre, apellidos].where((s) => s.isNotEmpty).join(' ').trim();
+      if (norm.contains(completo) && !result.contains(d.id)) result.add(d.id);
     }
   } catch (_) {}
   return result;

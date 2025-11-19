@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../proveedores/proveedor_proyectos.dart';
 import '../modelos/concurso.dart';
 import '../modelos/proyecto.dart';
+import '../modelos/categoria.dart';
 import 'pantalla_detalle_proyecto.dart';
 
 class PantallaProyectosConcurso extends StatefulWidget {
@@ -166,7 +167,17 @@ class _PantallaProyectosConcursoState extends State<PantallaProyectosConcurso> {
                   Icon(Icons.category, size: 16, color: Colors.grey[600]),
                   const SizedBox(width: 4),
                   Text(
-                    proyecto.categoriaId,
+                    (() {
+                      if ((proyecto.categoriaNombre ?? '').isNotEmpty) {
+                        return proyecto.categoriaNombre!;
+                      }
+                      final cats = widget.concurso.categorias;
+                      final match = cats.firstWhere(
+                        (c) => c.id == proyecto.categoriaId,
+                        orElse: () => Categoria(nombre: '', rangoCiclos: ''),
+                      );
+                      return match.nombre.isNotEmpty ? match.nombre : 'Sin categoría';
+                    })(),
                     style: TextStyle(
                       fontSize: 12,
                       color: Colors.grey[600],
@@ -381,6 +392,54 @@ class _PantallaProyectosConcursoState extends State<PantallaProyectosConcurso> {
               if (value == 'refresh') {
                 Provider.of<ProveedorProyectos>(context, listen: false)
                     .cargarProyectosPorConcurso(widget.concurso.id);
+              } else if (value == 'fill_cats') {
+                () async {
+                  final prov = Provider.of<ProveedorProyectos>(context, listen: false);
+                  final count = await prov.completarCategoriaNombreActual();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Categorías completadas en $count proyectos')),
+                    );
+                  }
+                }();
+              } else if (value == 'diag_cats') {
+                () async {
+                  final prov = Provider.of<ProveedorProyectos>(context, listen: false);
+                  final diag = await prov.diagnosticoCategoriasActual();
+                  if (!mounted) return;
+                  showDialog(
+                    context: context,
+                    builder: (context) {
+                      final catMap = Map<String, String>.from(diag['categorias'] ?? {});
+                      final sinId = List<String>.from(diag['proyectos_sin_categoria_id'] ?? []);
+                      final idNo = Map<String, String>.from(diag['proyectos_catid_no_existe'] ?? {});
+                      final sinNom = Map<String, String>.from(diag['proyectos_sin_categoria_nombre'] ?? {});
+                      return AlertDialog(
+                        title: const Text('Diagnóstico de categorías'),
+                        content: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Categorías: ${catMap.length}'),
+                              const SizedBox(height: 8),
+                              Text('Proyectos sin categoria_id: ${sinId.length}'),
+                              const SizedBox(height: 8),
+                              Text('Proyectos con categoria_id inexistente: ${idNo.length}'),
+                              const SizedBox(height: 8),
+                              Text('Proyectos sin categoria_nombre: ${sinNom.length}'),
+                            ],
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: const Text('Cerrar'),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                }();
               }
             },
             itemBuilder: (context) => [
@@ -391,6 +450,26 @@ class _PantallaProyectosConcursoState extends State<PantallaProyectosConcurso> {
                     Icon(Icons.refresh),
                     SizedBox(width: 8),
                     Text('Actualizar'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'fill_cats',
+                child: Row(
+                  children: [
+                    Icon(Icons.category),
+                    SizedBox(width: 8),
+                    Text('Completar nombres de categorías'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'diag_cats',
+                child: Row(
+                  children: [
+                    Icon(Icons.search),
+                    SizedBox(width: 8),
+                    Text('Diagnóstico de categorías'),
                   ],
                 ),
               ),

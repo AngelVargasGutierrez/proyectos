@@ -60,13 +60,8 @@ class ProveedorConcursos extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Mostrar concursos según rol del usuario
-      final admin = ServicioAutenticacion().administradorActual;
-      if (admin != null && admin.rol == RolUsuario.jurado) {
-        _concursos = await _servicioConcursos.obtenerConcursos();
-      } else {
-        _concursos = await _servicioConcursos.obtenerConcursosDelAdministrador();
-      }
+      // Mostrar todos los concursos
+      _concursos = await _servicioConcursos.obtenerConcursos();
       _cargando = false;
       notifyListeners();
     } catch (e) {

@@ -124,6 +124,18 @@ class ProveedorProyectos extends ChangeNotifier {
     }
   }
 
+  Future<int> completarCategoriaNombreActual() async {
+    if (_concursoActual == null || _concursoActual!.isEmpty) return 0;
+    final n = await _servicioProyectos.completarCategoriaNombreConcurso(_concursoActual!);
+    await cargarProyectosPorConcurso(_concursoActual!);
+    return n;
+  }
+
+  Future<Map<String, dynamic>> diagnosticoCategoriasActual() async {
+    if (_concursoActual == null || _concursoActual!.isEmpty) return {'error': 'sin_concurso'};
+    return await _servicioProyectos.diagnosticoCategoriasConcurso(_concursoActual!);
+  }
+
   List<Proyecto> filtrarPorEstado(EstadoProyecto estado) {
     return _proyectos.where((proyecto) => proyecto.estado == estado).toList();
   }

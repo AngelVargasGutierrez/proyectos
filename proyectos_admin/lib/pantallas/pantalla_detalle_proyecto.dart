@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import '../modelos/proyecto.dart';
 import '../modelos/concurso.dart';
+import '../modelos/categoria.dart';
 import '../proveedores/proveedor_proyectos.dart';
 import '../proveedores/proveedor_autenticacion.dart';
 import '../modelos/administrador.dart';
@@ -82,6 +83,56 @@ class _PantallaDetalleProyectoState extends State<PantallaDetalleProyecto> {
     );
   }
 
+  Future<String> _nombreCategoria() async {
+    try {
+      final ref = FirebaseFirestore.instance
+          .collection('concursos')
+          .doc(widget.concurso.id)
+          .collection('categorias')
+          .doc(widget.proyecto.categoriaId);
+      final snap = await ref.get();
+      final data = snap.data() ?? <String, dynamic>{};
+      final nombre = (data['nombre'] ?? '') as String;
+      return nombre.isNotEmpty ? nombre : '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<String> _nombreCategoriaRobusto() async {
+    // 1) Intentar por categoriaId del modelo
+    final n1 = await _nombreCategoria();
+    if (n1.isNotEmpty) return n1;
+    try {
+      // 2) Leer proyecto para obtener 'categoria_id'
+      final pDoc = await FirebaseFirestore.instance
+          .collection('concursos')
+          .doc(widget.concurso.id)
+          .collection('proyectos')
+          .doc(widget.proyecto.id)
+          .get();
+      final pData = pDoc.data() ?? <String, dynamic>{};
+      String catId = (pData['categoria_id'] ?? '').toString();
+      if (catId.isEmpty) {
+        // 3) Fallback: derivar desde el ID del documento si es del tipo 'categoriaId-estudianteId'
+        final parts = widget.proyecto.id.split('-');
+        if (parts.isNotEmpty) catId = parts.first;
+      }
+      if (catId.isEmpty) return '';
+      final cDoc = await FirebaseFirestore.instance
+          .collection('concursos')
+          .doc(widget.concurso.id)
+          .collection('categorias')
+          .doc(catId)
+          .get();
+      final cData = cDoc.data() ?? <String, dynamic>{};
+      final nombre = (cData['nombre'] ?? '') as String;
+      return nombre.isNotEmpty ? nombre : '';
+    } catch (_) {
+      return '';
+    }
+  }
+
   Future<List<String>> _juradosAsignadosCategoria() async {
     try {
       final ref = FirebaseFirestore.instance
@@ -92,7 +143,7 @@ class _PantallaDetalleProyectoState extends State<PantallaDetalleProyecto> {
       final snap = await ref.get();
       final data = snap.data() ?? <String, dynamic>{};
       final lista = (data['jurados_asignados'] ?? data['juradosAsignados'] ?? []) as List;
-      return lista.map((e) => e.toString()).toList();
+      return lista.map((e) => e.toString().trim()).toList();
     } catch (_) {
       return [];
     }
@@ -107,7 +158,7 @@ class _PantallaDetalleProyectoState extends State<PantallaDetalleProyecto> {
           .doc(widget.proyecto.categoriaId);
       final snap = await ref.get();
       final data = snap.data() ?? <String, dynamic>{};
-      final lista = (data['jurados_asignados_uids'] ?? data['juradosAsignados'] ?? []) as List;
+      final lista = (data['jurados_asignados_uids'] ?? []) as List;
       return lista.map((e) => e.toString()).toList();
     } catch (_) {
       return [];
@@ -132,6 +183,15 @@ class _PantallaDetalleProyectoState extends State<PantallaDetalleProyecto> {
     } catch (_) {
       return [];
     }
+  }
+
+  Future<List<String>> _juradosAsignadosCategoriaNombresPreferidos() async {
+    final uids = await _juradosAsignadosCategoriaUids();
+    if (uids.isNotEmpty) {
+      final nombres = await _nombresJuradosPorUids(uids);
+      if (nombres.isNotEmpty) return nombres;
+    }
+    return await _juradosAsignadosCategoria();
   }
 
   Color _obtenerColorEstado(EstadoProyecto estado) {
@@ -394,7 +454,16 @@ class _PantallaDetalleProyectoState extends State<PantallaDetalleProyecto> {
                     _construirFilaInfo(
                       Icons.category,
                       'Categoría',
-                      widget.proyecto.categoriaId,
+                      (() {
+                        final cn = (widget.proyecto.categoriaNombre ?? '').trim();
+                        if (cn.isNotEmpty) return cn;
+                        final cats = widget.concurso.categorias;
+                        final match = cats.firstWhere(
+                          (c) => c.id == widget.proyecto.categoriaId,
+                          orElse: () => Categoria(nombre: '', rangoCiclos: ''),
+                        );
+                        return match.nombre.isNotEmpty ? match.nombre : 'Sin categoría';
+                      })(),
                     ),
                     const SizedBox(height: 8),
                     _construirFilaInfo(
@@ -576,7 +645,7 @@ class _PantallaDetalleProyectoState extends State<PantallaDetalleProyecto> {
                     ],
                     const SizedBox(height: 16),
                     FutureBuilder<List<String>>(
-                      future: _juradosAsignadosCategoria(),
+                      future: _juradosAsignadosCategoriaNombresPreferidos(),
                       builder: (context, snap) {
                         final lista = snap.data ?? const [];
                         if (lista.isEmpty) return const SizedBox.shrink();
@@ -669,10 +738,10 @@ class _PantallaDetalleProyectoState extends State<PantallaDetalleProyecto> {
                       context,
                     );
                     final nombreCompleto =
-                        (((authProv.administradorActual?.nombres ?? '') +
+                        (((authProv.administradorActual?.nombres ?? '').trim() +
                                 ' ' +
-                                (authProv.administradorActual?.apellidos ??
-                                    '')))
+                                (authProv.administradorActual?.apellidos ?? '')
+                                    .trim()))
                             .trim()
                             .toUpperCase();
                     final uidActual = authProv.administradorActual?.id ?? '';

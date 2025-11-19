@@ -8,6 +8,7 @@ class Proyecto {
   final String correoEstudiante;
   final String concursoId;
   final String categoriaId;
+  final String? categoriaNombre;
   final DateTime fechaEnvio;
   final EstadoProyecto estado;
   final String? comentarios;
@@ -23,6 +24,7 @@ class Proyecto {
     required this.correoEstudiante,
     required this.concursoId,
     required this.categoriaId,
+    this.categoriaNombre,
     required this.fechaEnvio,
     required this.estado,
     this.comentarios,
@@ -40,6 +42,7 @@ class Proyecto {
       'correoEstudiante': correoEstudiante,
       'concursoId': concursoId,
       'categoriaId': categoriaId,
+      'categoriaNombre': categoriaNombre,
       'fechaEnvio': fechaEnvio.millisecondsSinceEpoch,
       'estado': estado.name,
       'comentarios': comentarios,
@@ -58,6 +61,7 @@ class Proyecto {
       correoEstudiante: json['correoEstudiante'],
       concursoId: json['concursoId'],
       categoriaId: json['categoriaId'],
+      categoriaNombre: json['categoriaNombre'],
       fechaEnvio: DateTime.fromMillisecondsSinceEpoch(json['fechaEnvio']),
       estado: EstadoProyecto.values.byName(json['estado']),
       comentarios: json['comentarios'],

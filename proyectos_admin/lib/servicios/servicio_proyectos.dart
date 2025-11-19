@@ -21,6 +21,19 @@ class ServicioProyectos {
     } catch (e) {
       // Fallback a Firestore: leer subcoleccion proyectos del concurso
       try {
+        final catMap = <String, String>{};
+        try {
+          final catsSnap = await FirebaseFirestore.instance
+              .collection('concursos')
+              .doc(concursoId)
+              .collection('categorias')
+              .get();
+          for (final c in catsSnap.docs) {
+            final cd = c.data();
+            final nombre = (cd['nombre'] ?? '') as String;
+            if (nombre.isNotEmpty) catMap[c.id] = nombre;
+          }
+        } catch (_) {}
         final qs = await FirebaseFirestore.instance
             .collection('concursos')
             .doc(concursoId)
@@ -85,6 +98,36 @@ class ServicioProyectos {
               return 'enviado';
             }
 
+            // Resolver nombre de categoría con múltiples fuentes
+            String catId = (data['categoria_id'] ?? '') as String;
+            if (catId.isEmpty) {
+              final parts = doc.id.split('-');
+              if (parts.isNotEmpty) catId = parts.first;
+            }
+            String? catNombre = catMap[catId];
+            if (catNombre == null || catNombre.isEmpty) {
+              try {
+                final cDoc = await FirebaseFirestore.instance
+                    .collection('concursos')
+                    .doc(concursoId)
+                    .collection('categorias')
+                    .doc(catId)
+                    .get();
+                final cData = cDoc.data() ?? <String, dynamic>{};
+                final nombre = (cData['nombre'] ?? '') as String;
+                if (nombre.isNotEmpty) catNombre = nombre;
+              } catch (_) {}
+              // Fallback adicional: si solo existe una categoría en el concurso, usar esa
+              if ((catNombre == null || catNombre.isEmpty) && catMap.length == 1) {
+                catNombre = catMap.values.first;
+              }
+              // Fallback: si el proyecto ya guarda el nombre en texto
+              if (catNombre == null || catNombre.isEmpty) {
+                final catTexto = ((data['categoria'] ?? data['categoria_nombre'] ?? '') as String).trim();
+                if (catTexto.isNotEmpty) catNombre = catTexto;
+              }
+            }
+
             return Proyecto(
               id: doc.id,
               nombre: (data['nombre'] ?? data['titulo'] ?? '') as String,
@@ -96,7 +139,8 @@ class ServicioProyectos {
               nombreEstudiante: nombreEstudiante,
               correoEstudiante: correoEstudiante,
               concursoId: (data['concurso_id'] ?? concursoId) as String,
-              categoriaId: (data['categoria_id'] ?? '') as String,
+              categoriaId: catId,
+              categoriaNombre: (catNombre != null && catNombre.isNotEmpty) ? catNombre : null,
               fechaEnvio: _parseFecha(data['fecha_envio']),
               estado: _mapEstado(_estadoDesdeFs(data['estado'])),
               comentarios: (data['comentarios'] ?? '') as String?,
@@ -118,6 +162,57 @@ class ServicioProyectos {
     required Map<String, int> criterios,
   }) async {
     try {
+      // Verificar asignación del jurado a la categoría
+      final refCategoria = FirebaseFirestore.instance
+          .collection('concursos')
+          .doc(concursoId)
+          .collection('categorias')
+          .doc(categoriaId);
+      final catSnap = await refCategoria.get();
+      final catData = catSnap.data() ?? <String, dynamic>{};
+      final asignadosUids = ((catData['jurados_asignados_uids'] ?? []) as List)
+          .map((e) => e.toString())
+          .toList();
+      final asignadosNombres = ((catData['jurados_asignados'] ?? []) as List)
+          .map((e) => e.toString().toUpperCase().trim())
+          .toList();
+      bool autorizado = false;
+      if (asignadosUids.isNotEmpty) {
+        autorizado = asignadosUids.contains(juradoUid);
+      }
+      if (!autorizado && asignadosNombres.isNotEmpty) {
+        DocumentSnapshot<Map<String, dynamic>> doc = await FirebaseFirestore
+            .instance
+            .collection('jurados')
+            .doc(juradoUid)
+            .get();
+        if (!doc.exists) {
+          doc = await FirebaseFirestore.instance
+              .collection('jurado')
+              .doc(juradoUid)
+              .get();
+        }
+        final jd = doc.data() ?? <String, dynamic>{};
+        final nombre = (jd['nombre'] ?? jd['nombres'] ?? '')
+            .toString()
+            .toUpperCase()
+            .trim();
+        final apellidos = (jd['apellidos'] ?? '')
+            .toString()
+            .toUpperCase()
+            .trim();
+        final completo = [nombre, apellidos]
+            .where((s) => s.isNotEmpty)
+            .join(' ')
+            .trim();
+        if (completo.isNotEmpty) {
+          autorizado = asignadosNombres.contains(completo);
+        }
+      }
+      if (!autorizado) {
+        return false;
+      }
+
       // Persistir evaluación del jurado en Firestore y recalcular puntuación promedio
       final refProyecto = FirebaseFirestore.instance
           .collection('concursos')
@@ -158,20 +253,13 @@ class ServicioProyectos {
       }
 
       // Verificar si TODOS los jurados asignados a la categoría ya votaron
-      final refCategoria = FirebaseFirestore.instance
-          .collection('concursos')
-          .doc(concursoId)
-          .collection('categorias')
-          .doc(categoriaId);
-      final catSnap = await refCategoria.get();
-      final catData = catSnap.data() ?? <String, dynamic>{};
-      final asignadosUids = (catData['jurados_asignados_uids'] ?? []) as List?;
-      final asignadosNombres = (catData['jurados_asignados'] ?? []) as List?;
+      final asignadosUids2 = (catData['jurados_asignados_uids'] ?? []) as List?;
+      final asignadosNombres2 = (catData['jurados_asignados'] ?? []) as List?;
       int totalAsignados = 0;
-      if (asignadosUids != null && asignadosUids.isNotEmpty) {
-        totalAsignados = asignadosUids.length;
-      } else if (asignadosNombres != null && asignadosNombres.isNotEmpty) {
-        totalAsignados = asignadosNombres.length;
+      if (asignadosUids2 != null && asignadosUids2.isNotEmpty) {
+        totalAsignados = asignadosUids2.length;
+      } else if (asignadosNombres2 != null && asignadosNombres2.isNotEmpty) {
+        totalAsignados = asignadosNombres2.length;
       }
       final votosRecibidos = evals.length;
 
@@ -234,6 +322,17 @@ class ServicioProyectos {
     } catch (e) {
       // Fallback Firestore: filtrar por categoria dentro del concurso
       try {
+        String nombreCategoria = '';
+        try {
+          final catDoc = await FirebaseFirestore.instance
+              .collection('concursos')
+              .doc(concursoId)
+              .collection('categorias')
+              .doc(categoriaId)
+              .get();
+          final cd = catDoc.data() ?? <String, dynamic>{};
+          nombreCategoria = (cd['nombre'] ?? '') as String;
+        } catch (_) {}
         final qs = await FirebaseFirestore.instance
             .collection('concursos')
             .doc(concursoId)
@@ -262,6 +361,11 @@ class ServicioProyectos {
             correoEstudiante: '',
             concursoId: (data['concurso_id'] ?? concursoId) as String,
             categoriaId: (data['categoria_id'] ?? '') as String,
+            categoriaNombre: nombreCategoria.isNotEmpty
+                ? nombreCategoria
+                : (((data['categoria'] ?? data['categoria_nombre'] ?? '') as String).trim().isNotEmpty
+                    ? ((data['categoria'] ?? data['categoria_nombre'] ?? '') as String).trim()
+                    : null),
             fechaEnvio: _parseFecha(data['fecha_envio']),
             estado: _mapEstado(((data['estado'] ?? 'enviado') as String)),
             comentarios: (data['comentarios'] ?? '') as String?,
@@ -290,12 +394,37 @@ class ServicioProyectos {
             .collectionGroup('proyectos')
             .where('estudiante_id', isEqualTo: estudianteId)
             .get();
-        return qs.docs.map((doc) {
+        return Future.wait(qs.docs.map((doc) async {
           final data = doc.data();
           DateTime _parseFecha(dynamic v) {
             if (v is Timestamp) return v.toDate();
             if (v is String) return DateTime.tryParse(v) ?? DateTime.now();
             return DateTime.now();
+          }
+
+          final concursoIdFs = (data['concurso_id'] ?? (doc.reference.parent.parent?.id ?? '')) as String;
+          String catId = (data['categoria_id'] ?? '') as String;
+          if (catId.isEmpty) {
+            final parts = doc.id.split('-');
+            if (parts.isNotEmpty) catId = parts.first;
+          }
+          String? catNombre;
+          if (concursoIdFs.isNotEmpty && catId.isNotEmpty) {
+            try {
+              final cDoc = await FirebaseFirestore.instance
+                  .collection('concursos')
+                  .doc(concursoIdFs)
+                  .collection('categorias')
+                  .doc(catId)
+                  .get();
+              final cData = cDoc.data() ?? <String, dynamic>{};
+              final nombre = (cData['nombre'] ?? '') as String;
+              if (nombre.isNotEmpty) catNombre = nombre;
+            } catch (_) {}
+          }
+          if (catNombre == null || catNombre.isEmpty) {
+            final texto = ((data['categoria'] ?? data['categoria_nombre'] ?? '') as String).trim();
+            if (texto.isNotEmpty) catNombre = texto;
           }
 
           return Proyecto(
@@ -310,16 +439,15 @@ class ServicioProyectos {
                     as String,
             nombreEstudiante: '',
             correoEstudiante: '',
-            concursoId:
-                (data['concurso_id'] ?? (doc.reference.parent.parent?.id ?? ''))
-                    as String,
-            categoriaId: (data['categoria_id'] ?? '') as String,
+            concursoId: concursoIdFs,
+            categoriaId: catId,
+            categoriaNombre: (catNombre != null && catNombre.isNotEmpty) ? catNombre : null,
             fechaEnvio: _parseFecha(data['fecha_envio']),
             estado: _mapEstado(((data['estado'] ?? 'enviado') as String)),
             comentarios: (data['comentarios'] ?? '') as String?,
             puntuacion: ((data['puntuacion'] ?? 0) as num).toDouble(),
           );
-        }).toList();
+        }));
       } catch (_) {
         return [];
       }
@@ -423,6 +551,108 @@ class ServicioProyectos {
       } catch (_) {
         return false;
       }
+    }
+  }
+
+  Future<int> completarCategoriaNombreConcurso(String concursoId) async {
+    try {
+      final catMap = <String, String>{};
+      final catsSnap = await FirebaseFirestore.instance
+          .collection('concursos')
+          .doc(concursoId)
+          .collection('categorias')
+          .get();
+      for (final c in catsSnap.docs) {
+        final cd = c.data();
+        final nombre = (cd['nombre'] ?? '') as String;
+        if (nombre.isNotEmpty) catMap[c.id] = nombre;
+      }
+      if (catMap.isEmpty) return 0;
+      final projs = await FirebaseFirestore.instance
+          .collection('concursos')
+          .doc(concursoId)
+          .collection('proyectos')
+          .get();
+      final batch = FirebaseFirestore.instance.batch();
+      int updates = 0;
+      for (final d in projs.docs) {
+        final data = d.data();
+        String catId = (data['categoria_id'] ?? '') as String;
+        if (catId.isEmpty) {
+          final parts = d.id.split('-');
+          if (parts.isNotEmpty) catId = parts.first;
+        }
+        String nombre = '';
+        if (catId.isNotEmpty && catMap.containsKey(catId)) {
+          nombre = catMap[catId] ?? '';
+        }
+        if (nombre.isEmpty) {
+          final texto = ((data['categoria'] ?? data['categoria_nombre'] ?? '') as String).trim();
+          if (texto.isNotEmpty) nombre = texto;
+        }
+        if (nombre.isEmpty) continue;
+        final actual = ((data['categoria_nombre'] ?? '') as String).trim();
+        if (actual != nombre) {
+          batch.update(d.reference, {'categoria_nombre': nombre});
+          updates++;
+        }
+      }
+      if (updates > 0) await batch.commit();
+      return updates;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<Map<String, dynamic>> diagnosticoCategoriasConcurso(String concursoId) async {
+    final resultado = <String, dynamic>{};
+    try {
+      final catMap = <String, String>{};
+      final catsSnap = await FirebaseFirestore.instance
+          .collection('concursos')
+          .doc(concursoId)
+          .collection('categorias')
+          .get();
+      for (final c in catsSnap.docs) {
+        final cd = c.data();
+        final nombre = (cd['nombre'] ?? '') as String;
+        if (nombre.isNotEmpty) catMap[c.id] = nombre;
+      }
+      resultado['categorias'] = catMap;
+      final projs = await FirebaseFirestore.instance
+          .collection('concursos')
+          .doc(concursoId)
+          .collection('proyectos')
+          .get();
+      final sinCatId = <String>[];
+      final catIdNoExiste = <String, String>{};
+      final sinCatNombre = <String, String>{};
+      for (final d in projs.docs) {
+        final data = d.data();
+        String catId = (data['categoria_id'] ?? '') as String;
+        if (catId.isEmpty) {
+          final parts = d.id.split('-');
+          if (parts.isNotEmpty) catId = parts.first;
+        }
+        if (catId.isEmpty) {
+          sinCatId.add(d.id);
+          continue;
+        }
+        if (!catMap.containsKey(catId)) {
+          catIdNoExiste[d.id] = catId;
+        }
+        final nombre = ((data['categoria_nombre'] ?? '') as String).trim();
+        if (nombre.isEmpty) {
+          sinCatNombre[d.id] = catMap[catId] ?? '';
+        }
+      }
+      resultado['proyectos_sin_categoria_id'] = sinCatId;
+      resultado['proyectos_catid_no_existe'] = catIdNoExiste;
+      resultado['proyectos_sin_categoria_nombre'] = sinCatNombre;
+      return resultado;
+    } catch (e) {
+      resultado['error'] = e.toString();
+      return resultado;
     }
   }
 
