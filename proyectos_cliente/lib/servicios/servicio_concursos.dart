@@ -3,7 +3,9 @@ import '../modelos/proyecto.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:typed_data';
+import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
 import '../utilidades/api_config.dart';
 
 class ServicioConcursos {
@@ -14,6 +16,46 @@ class ServicioConcursos {
   }
 
   ServicioConcursos._();
+
+  Future<List<Map<String, String>>> obtenerAptos(String concursoId) async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('concursos')
+          .doc(concursoId)
+          .collection('proyectos')
+          .where('estado', whereIn: ['apto', 'aprobado'])
+          .get();
+      return snap.docs.map((d) {
+        final data = d.data();
+        return {
+          'nombre': (data['nombre'] ?? '') as String,
+          'categoria': (data['categoria_nombre'] ?? '') as String,
+        };
+      }).toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<List<Map<String, String>>> obtenerGanadores(String concursoId) async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('concursos')
+          .doc(concursoId)
+          .collection('proyectos')
+          .where('estado', isEqualTo: 'ganador')
+          .get();
+      return snap.docs.map((d) {
+        final data = d.data();
+        return {
+          'nombre': (data['nombre'] ?? '') as String,
+          'categoria': (data['categoria_nombre'] ?? '') as String,
+        };
+      }).toList();
+    } catch (e) {
+      return [];
+    }
+  }
 
   Future<List<Concurso>> obtenerConcursosDisponibles() async {
     try {
@@ -60,6 +102,9 @@ class ServicioConcursos {
             fechaFin: fechaFin,
             activo: activo,
             categorias: categorias,
+            fechaRevision: _parseFecha(data['fecha_revision']),
+            fechaConfirmacionAceptados: _parseFecha(data['fecha_confirmacion_aceptados']),
+            basesUrl: (data['bases_url'] ?? '') as String?,
           ),
         );
       }
@@ -89,6 +134,9 @@ class ServicioConcursos {
     required String enlaceGithub,
     String? archivoZipNombre,
     Uint8List? archivoZipBytes,
+    List<String>? equipoCorreos,
+    String? avalNombre,
+    Uint8List? avalBytes,
   }) async {
     try {
       // Solo Firebase: subir directamente a Storage y guardar en Firestore
@@ -96,13 +144,34 @@ class ServicioConcursos {
       // Fallback: subir archivo comprimido (ZIP/RAR) a Storage y guardar envio en Firestore bajo el concurso
       try {
         final concursoRef = FirebaseFirestore.instance.collection('concursos').doc(concursoId);
+        // Obtener correo del líder (usuario actual) para control por equipo
+        String liderCorreo = '';
+        try {
+          final userDoc = await FirebaseFirestore.instance.collection('usuarios').doc(estudianteId).get();
+          final ud = userDoc.data() ?? <String, dynamic>{};
+          liderCorreo = ((ud['correo'] ?? '') as String).toLowerCase().trim();
+        } catch (_) {}
         // Unicidad por concurso: si ya existe algún proyecto del estudiante en este concurso, bloquear
-        final existeEnConcurso = await concursoRef
+        final existePorEstudiante = await concursoRef
             .collection('proyectos')
             .where('estudiante_id', isEqualTo: estudianteId)
             .limit(1)
             .get();
-        if (existeEnConcurso.docs.isNotEmpty) {
+        // Revisar por equipo: si el usuario actual aparece ya como líder o en equipo_correos en cualquier proyecto del concurso
+        bool existePorEquipo = false;
+        try {
+          final todos = await concursoRef.collection('proyectos').get();
+          for (final d in todos.docs) {
+            final pd = d.data();
+            final leaderUid = (pd['equipo_lider_uid'] ?? '') as String;
+            final leaderMail = ((pd['equipo_lider_correo'] ?? '') as String).toLowerCase().trim();
+            final miembros = ((pd['equipo_correos'] ?? []) as List).map((e) => e.toString().toLowerCase().trim()).toList();
+            if (leaderUid == estudianteId) { existePorEquipo = true; break; }
+            if (liderCorreo.isNotEmpty && leaderMail == liderCorreo) { existePorEquipo = true; break; }
+            if (liderCorreo.isNotEmpty && miembros.contains(liderCorreo)) { existePorEquipo = true; break; }
+          }
+        } catch (_) {}
+        if (existePorEstudiante.docs.isNotEmpty || existePorEquipo) {
           // Ya existe en Firestore: no duplicamos, pero creamos carpeta en backend
           try {
             final intConc = int.tryParse(concursoId) ?? 1;
@@ -135,6 +204,7 @@ class ServicioConcursos {
         final proyectoRef = concursoRef.collection('proyectos').doc('$categoriaId-$estudianteId');
 
         String? descargaUrl;
+        String? avalUrl;
         // Subir archivo sólo si fue proporcionado
         if (archivoZipBytes != null && archivoZipBytes.isNotEmpty) {
           // Determinar extensión y MIME
@@ -178,6 +248,9 @@ class ServicioConcursos {
           'concurso_id': concursoId,
           'categoria_id': categoriaId,
         };
+        if (liderCorreo.isNotEmpty) {
+          data['equipo_lider_correo'] = liderCorreo;
+        }
         if (categoriaNombre.isNotEmpty) {
           data['categoria_nombre'] = categoriaNombre;
         }
@@ -186,6 +259,41 @@ class ServicioConcursos {
           if (archivoZipNombre != null) {
             data['nombre_zip'] = archivoZipNombre.trim();
           }
+        }
+        // Aval obligatorio: guardar como base64 en Firestore para evitar dependencia de Storage
+        if (avalBytes != null && avalBytes.isNotEmpty) {
+          final size = avalBytes.lengthInBytes;
+          if (size > 800 * 1024) {
+            return false;
+          }
+          String ext = 'png';
+          if (avalNombre != null) {
+            final n = avalNombre!.toLowerCase();
+            final idx = n.lastIndexOf('.');
+            if (idx != -1 && idx < n.length - 1) {
+              ext = n.substring(idx + 1);
+            }
+          }
+          String mime = 'image/png';
+          if (ext == 'jpg' || ext == 'jpeg') mime = 'image/jpeg';
+          if (ext == 'webp') mime = 'image/webp';
+          final b64 = base64Encode(avalBytes);
+          data['aval_base64'] = 'data:$mime;base64,$b64';
+          data['aval_mime'] = mime;
+          if (avalNombre != null && avalNombre!.isNotEmpty) {
+            data['aval_nombre'] = avalNombre!.trim();
+          }
+        }
+        // Equipo (correos), líder es el estudiante actual
+        final miembros = (equipoCorreos ?? [])
+            .map((e) => e.toLowerCase().trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
+        if (miembros.isNotEmpty) {
+          // Guardar todos los correos normalizados (dominio libre)
+          data['equipo_correos'] = miembros;
+          data['equipo_lider_uid'] = estudianteId;
+          data['equipo_ms_uids'] = []; // RF-C09: se completará luego
         }
         await proyectoRef.set(data);
 
@@ -231,15 +339,58 @@ class ServicioConcursos {
   Future<List<Proyecto>> obtenerProyectosEstudiante(String estudianteId) async {
     try {
       // Solo Firebase: excluir llamadas a API y consultar directamente Firestore
-
-      // Fallback: consultar proyectos desde Firestore (collectionGroup)
       try {
-        final qs = await FirebaseFirestore.instance
+        // Correo del usuario para consultas por equipo
+        String correo = '';
+        try {
+          final authMail = FirebaseAuth.instance.currentUser?.email;
+          if (authMail != null && authMail.isNotEmpty) {
+            correo = authMail.toLowerCase().trim();
+          }
+        } catch (_) {}
+        if (correo.isEmpty) {
+          try {
+            final uDoc = await FirebaseFirestore.instance.collection('usuarios').doc(estudianteId).get();
+            final ud = uDoc.data() ?? <String, dynamic>{};
+            correo = ((ud['correo'] ?? '') as String).toLowerCase().trim();
+          } catch (_) {}
+        }
+
+        final resultados = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+        // Proyectos enviados por el propio usuario
+        final q1 = await FirebaseFirestore.instance
             .collectionGroup('proyectos')
             .where('estudiante_id', isEqualTo: estudianteId)
             .get();
+        resultados.addAll(q1.docs);
+        // Proyectos donde es líder por UID
+        final q2 = await FirebaseFirestore.instance
+            .collectionGroup('proyectos')
+            .where('equipo_lider_uid', isEqualTo: estudianteId)
+            .get();
+        resultados.addAll(q2.docs);
+        // Proyectos donde es líder por correo
+        if (correo.isNotEmpty) {
+          final q3 = await FirebaseFirestore.instance
+              .collectionGroup('proyectos')
+              .where('equipo_lider_correo', isEqualTo: correo)
+              .get();
+          resultados.addAll(q3.docs);
+          // Proyectos donde figura como integrante
+          final q4 = await FirebaseFirestore.instance
+              .collectionGroup('proyectos')
+              .where('equipo_correos', arrayContains: correo)
+              .get();
+          resultados.addAll(q4.docs);
+        }
 
-        return qs.docs.map((doc) {
+        // Unificar por ruta (evitar duplicados) y mapear
+        final vistos = <String>{};
+        final proyectos = <Proyecto>[];
+        for (final doc in resultados) {
+          final key = doc.reference.path;
+          if (vistos.contains(key)) continue;
+          vistos.add(key);
           final data = doc.data();
           final concursoIdFs = doc.reference.parent.parent?.id ?? (data['concurso_id'] ?? '') as String;
           final fechaEnvioTs = data['fecha_envio'];
@@ -252,7 +403,7 @@ class ServicioConcursos {
             fechaEnvio = DateTime.now();
           }
           final estadoStr = (data['estado'] ?? 'pendiente') as String;
-          return Proyecto(
+          proyectos.add(Proyecto(
             id: doc.id,
             nombre: (data['nombre'] ?? data['titulo'] ?? '') as String,
             estudianteId: (data['estudiante_id'] ?? data['estudiante_uid'] ?? '') as String,
@@ -263,8 +414,11 @@ class ServicioConcursos {
             estado: _estadoClienteDesdeApi(estadoStr),
             fechaEnvio: fechaEnvio,
             comentarioAdmin: (data['comentarios'] ?? data['comentario_admin']) as String?,
-          );
-        }).toList();
+            categoriaNombre: (data['categoria_nombre'] ?? '') as String?,
+            onedriveUrl: (data['onedrive_url'] ?? data['onedrive_folder'] ?? data['onedrive']) as String?,
+          ));
+        }
+        return proyectos;
       } catch (fsErr) {
         print('Error Firestore al obtener proyectos del estudiante: $fsErr');
         return [];
@@ -282,6 +436,12 @@ EstadoProyecto _estadoClienteDesdeApi(String estado) {
       return EstadoProyecto.aprobado;
     case 'rechazado':
       return EstadoProyecto.rechazado;
+    case 'apto':
+      return EstadoProyecto.apto;
+    case 'finalizado':
+      return EstadoProyecto.finalizado;
+    case 'ganador':
+      return EstadoProyecto.ganador;
     default:
       return EstadoProyecto.pendiente;
   }

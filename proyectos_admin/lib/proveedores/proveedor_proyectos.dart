@@ -136,6 +136,13 @@ class ProveedorProyectos extends ChangeNotifier {
     return await _servicioProyectos.diagnosticoCategoriasConcurso(_concursoActual!);
   }
 
+  Future<int> normalizarCamposActual() async {
+    if (_concursoActual == null || _concursoActual!.isEmpty) return 0;
+    final n = await _servicioProyectos.normalizarCamposProyectosConcurso(_concursoActual!);
+    await cargarProyectosPorConcurso(_concursoActual!);
+    return n;
+  }
+
   List<Proyecto> filtrarPorEstado(EstadoProyecto estado) {
     return _proyectos.where((proyecto) => proyecto.estado == estado).toList();
   }

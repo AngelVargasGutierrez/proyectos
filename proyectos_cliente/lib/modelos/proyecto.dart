@@ -2,6 +2,9 @@ enum EstadoProyecto {
   pendiente,
   aprobado,
   rechazado,
+  apto,
+  finalizado,
+  ganador,
 }
 
 class Proyecto {
@@ -15,6 +18,8 @@ class Proyecto {
   final EstadoProyecto estado;
   final DateTime fechaEnvio;
   final String? comentarioAdmin;
+  final String? categoriaNombre;
+  final String? onedriveUrl;
 
   Proyecto({
     required this.id,
@@ -27,6 +32,8 @@ class Proyecto {
     required this.estado,
     required this.fechaEnvio,
     this.comentarioAdmin,
+    this.categoriaNombre,
+    this.onedriveUrl,
   });
 
   factory Proyecto.desdeJson(Map<String, dynamic> json) {
@@ -41,6 +48,8 @@ class Proyecto {
       estado: _estadoDesdeTexto(json['estado'] ?? 'pendiente'),
       fechaEnvio: DateTime.parse(json['fecha_envio'] ?? DateTime.now().toString()),
       comentarioAdmin: json['comentario_admin'],
+      categoriaNombre: json['categoria_nombre'],
+      onedriveUrl: json['onedrive_url'] ?? json['onedrive_folder'] ?? json['onedrive'],
     );
   }
 
@@ -56,6 +65,8 @@ class Proyecto {
       'estado': _estadoATexto(estado),
       'fecha_envio': fechaEnvio.toIso8601String(),
       'comentario_admin': comentarioAdmin,
+      'categoria_nombre': categoriaNombre,
+      'onedrive_url': onedriveUrl,
     };
   }
 
@@ -65,6 +76,12 @@ class Proyecto {
         return EstadoProyecto.aprobado;
       case 'rechazado':
         return EstadoProyecto.rechazado;
+      case 'apto':
+        return EstadoProyecto.apto;
+      case 'finalizado':
+        return EstadoProyecto.finalizado;
+      case 'ganador':
+        return EstadoProyecto.ganador;
       default:
         return EstadoProyecto.pendiente;
     }
@@ -76,6 +93,12 @@ class Proyecto {
         return 'aprobado';
       case EstadoProyecto.rechazado:
         return 'rechazado';
+      case EstadoProyecto.apto:
+        return 'apto';
+      case EstadoProyecto.finalizado:
+        return 'finalizado';
+      case EstadoProyecto.ganador:
+        return 'ganador';
       case EstadoProyecto.pendiente:
         return 'pendiente';
     }
@@ -87,6 +110,12 @@ class Proyecto {
         return 'Aprobado';
       case EstadoProyecto.rechazado:
         return 'Rechazado';
+      case EstadoProyecto.apto:
+        return 'Apto';
+      case EstadoProyecto.finalizado:
+        return 'Finalizado';
+      case EstadoProyecto.ganador:
+        return 'Ganador';
       case EstadoProyecto.pendiente:
         return 'Pendiente de revision';
     }

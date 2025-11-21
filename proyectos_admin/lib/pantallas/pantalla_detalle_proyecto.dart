@@ -135,14 +135,56 @@ class _PantallaDetalleProyectoState extends State<PantallaDetalleProyecto> {
 
   Future<List<String>> _juradosAsignadosCategoria() async {
     try {
-      final ref = FirebaseFirestore.instance
+      DocumentReference<Map<String, dynamic>> ref = FirebaseFirestore.instance
           .collection('concursos')
           .doc(widget.concurso.id)
           .collection('categorias')
           .doc(widget.proyecto.categoriaId);
-      final snap = await ref.get();
-      final data = snap.data() ?? <String, dynamic>{};
-      final lista = (data['jurados_asignados'] ?? data['juradosAsignados'] ?? []) as List;
+      DocumentSnapshot<Map<String, dynamic>> snap = await ref.get();
+      Map<String, dynamic> data = snap.data() ?? <String, dynamic>{};
+      List lista = (data['jurados_asignados'] ?? data['juradosAsignados'] ?? []) as List;
+      if (lista.isEmpty || !snap.exists) {
+        final pDoc = await FirebaseFirestore.instance
+            .collection('concursos')
+            .doc(widget.concurso.id)
+            .collection('proyectos')
+            .doc(widget.proyecto.id)
+            .get();
+        final pd = pDoc.data() ?? <String, dynamic>{};
+        String catId2 = (pd['categoria_id'] ?? '').toString();
+        if (catId2.isEmpty) {
+          final parts = widget.proyecto.id.split('-');
+          if (parts.isNotEmpty) catId2 = parts.first;
+        }
+        if (catId2.isEmpty) {
+          final nombreCat = ((pd['categoria_nombre'] ?? '') as String).trim();
+          if (nombreCat.isNotEmpty) {
+            final catsAll = await FirebaseFirestore.instance
+                .collection('concursos')
+                .doc(widget.concurso.id)
+                .collection('categorias')
+                .get();
+            for (final c in catsAll.docs) {
+              final cd = c.data();
+              final nom = ((cd['nombre'] ?? '') as String).trim();
+              if (nom == nombreCat) {
+                catId2 = c.id;
+                break;
+              }
+            }
+          }
+        }
+        if (catId2.isNotEmpty) {
+          ref = FirebaseFirestore.instance
+              .collection('concursos')
+              .doc(widget.concurso.id)
+              .collection('categorias')
+              .doc(catId2);
+          snap = await ref.get();
+          data = snap.data() ?? <String, dynamic>{};
+          lista = (data['jurados_asignados'] ?? []) as List;
+        }
+      }
       return lista.map((e) => e.toString().trim()).toList();
     } catch (_) {
       return [];
@@ -151,6 +193,64 @@ class _PantallaDetalleProyectoState extends State<PantallaDetalleProyecto> {
 
   Future<List<String>> _juradosAsignadosCategoriaUids() async {
     try {
+      DocumentReference<Map<String, dynamic>> ref = FirebaseFirestore.instance
+          .collection('concursos')
+          .doc(widget.concurso.id)
+          .collection('categorias')
+          .doc(widget.proyecto.categoriaId);
+      DocumentSnapshot<Map<String, dynamic>> snap = await ref.get();
+      Map<String, dynamic> data = snap.data() ?? <String, dynamic>{};
+      List lista = (data['jurados_asignados_uids'] ?? []) as List;
+      if (lista.isEmpty || !snap.exists) {
+        final pDoc = await FirebaseFirestore.instance
+            .collection('concursos')
+            .doc(widget.concurso.id)
+            .collection('proyectos')
+            .doc(widget.proyecto.id)
+            .get();
+        final pd = pDoc.data() ?? <String, dynamic>{};
+        String catId2 = (pd['categoria_id'] ?? '').toString();
+        if (catId2.isEmpty) {
+          final parts = widget.proyecto.id.split('-');
+          if (parts.isNotEmpty) catId2 = parts.first;
+        }
+        if (catId2.isEmpty) {
+          final nombreCat = ((pd['categoria_nombre'] ?? '') as String).trim();
+          if (nombreCat.isNotEmpty) {
+            final catsAll = await FirebaseFirestore.instance
+                .collection('concursos')
+                .doc(widget.concurso.id)
+                .collection('categorias')
+                .get();
+            for (final c in catsAll.docs) {
+              final cd = c.data();
+              final nom = ((cd['nombre'] ?? '') as String).trim();
+              if (nom == nombreCat) {
+                catId2 = c.id;
+                break;
+              }
+            }
+          }
+        }
+        if (catId2.isNotEmpty) {
+          ref = FirebaseFirestore.instance
+              .collection('concursos')
+              .doc(widget.concurso.id)
+              .collection('categorias')
+              .doc(catId2);
+          snap = await ref.get();
+          data = snap.data() ?? <String, dynamic>{};
+          lista = (data['jurados_asignados_uids'] ?? []) as List;
+        }
+      }
+      return lista.map((e) => e.toString()).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<String>> _juradosAsignadosCategoriaCorreos() async {
+    try {
       final ref = FirebaseFirestore.instance
           .collection('concursos')
           .doc(widget.concurso.id)
@@ -158,8 +258,8 @@ class _PantallaDetalleProyectoState extends State<PantallaDetalleProyecto> {
           .doc(widget.proyecto.categoriaId);
       final snap = await ref.get();
       final data = snap.data() ?? <String, dynamic>{};
-      final lista = (data['jurados_asignados_uids'] ?? []) as List;
-      return lista.map((e) => e.toString()).toList();
+      final lista = (data['jurados_asignados_correos'] ?? []) as List;
+      return lista.map((e) => e.toString().toLowerCase().trim()).toList();
     } catch (_) {
       return [];
     }
@@ -748,124 +848,49 @@ class _PantallaDetalleProyectoState extends State<PantallaDetalleProyecto> {
                     bool puedeEvaluar = asignados.contains(uidActual);
                     if (!puedeEvaluar) {
                       return FutureBuilder<List<String>>(
-                        future: _juradosAsignadosCategoria(),
-                        builder: (context, sn2) {
-                          final nombres = sn2.data ?? const [];
-                          final match = nombres.any((n) =>
-                              nombreCompleto.contains(n.toUpperCase()) ||
-                              n.toUpperCase().contains(nombreCompleto));
-                          if (!match) {
-                            return Card(
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: const [
-                                    Text(
-                                      'Evaluación de Jurado',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
+                        future: _juradosAsignadosCategoriaCorreos(),
+                        builder: (context, snC) {
+                          final correos = snC.data ?? const [];
+                          final correoActual = (authProv.administradorActual?.correo ?? '').toLowerCase().trim();
+                          bool matchCorreo = correoActual.isNotEmpty && correos.contains(correoActual);
+                          if (!matchCorreo) {
+                            return FutureBuilder<List<String>>(
+                              future: _juradosAsignadosCategoria(),
+                              builder: (context, sn2) {
+                                final nombres = sn2.data ?? const [];
+                                final match = nombres.any((n) =>
+                                    nombreCompleto.contains(n.toUpperCase()) ||
+                                    n.toUpperCase().contains(nombreCompleto));
+                                if (!match) {
+                                  return Card(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: const [
+                                          Text(
+                                            'Evaluación de Jurado',
+                                            style: TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          SizedBox(height: 8),
+                                          Text('No estás asignado a esta categoría para puntuar.'),
+                                        ],
                                       ),
                                     ),
-                                    SizedBox(height: 8),
-                                    Text('No estás asignado a esta categoría para puntuar.'),
-                                  ],
-                                ),
-                              ),
+                                  );
+                                }
+                                return _buildCardEvaluacion();
+                              },
                             );
                           }
-                          return Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Evaluación del Jurado (0-4 por criterio)',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  ..._criterios.keys.map(
-                                    (nombre) => Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 6,
-                                      ),
-                                      child: _buildFilaCriterio(nombre),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text('Total: ${_totalEvaluacion()} / 28'),
-                                  const SizedBox(height: 12),
-                                  ElevatedButton.icon(
-                                    onPressed: _enviarEvaluacionJurado,
-                                    icon: const Icon(Icons.rate_review),
-                                    label: const Text('Enviar evaluación'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
+                          return _buildCardEvaluacion();
                         },
                       );
                     }
-                    return Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Evaluación del Jurado (0-4 por criterio)',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            ..._criterios.keys.map(
-                              (nombre) => Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 6,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Expanded(child: Text(nombre)),
-                                    DropdownButton<int>(
-                                      value: _criterios[nombre]!,
-                                      items: List.generate(
-                                        5,
-                                        (i) => DropdownMenuItem<int>(
-                                          value: i,
-                                          child: Text('$i'),
-                                        ),
-                                      ),
-                                      onChanged: (val) {
-                                        if (val == null) return;
-                                        setState(() {
-                                          _criterios[nombre] = val;
-                                        });
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text('Total: ${_totalEvaluacion()} / 28'),
-                            const SizedBox(height: 12),
-                            ElevatedButton.icon(
-                              onPressed: _enviarEvaluacionJurado,
-                              icon: const Icon(Icons.rate_review),
-                              label: const Text('Enviar evaluación'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
+                    return _buildCardEvaluacion();
                   },
                 );
               },
@@ -906,6 +931,61 @@ class _PantallaDetalleProyectoState extends State<PantallaDetalleProyecto> {
             ],
 
             const SizedBox(height: 32),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCardEvaluacion() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Evaluación del Jurado (0-4 por criterio)',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+              future: FirebaseFirestore.instance
+                  .collection('concursos')
+                  .doc(widget.concurso.id)
+                  .collection('proyectos')
+                  .doc(widget.proyecto.id)
+                  .get(),
+              builder: (context, snap) {
+                final data = snap.data?.data() ?? <String, dynamic>{};
+                final vr = (data['votos_recibidos'] ?? 0) as int;
+                final va = (data['votos_asignados'] ?? 0) as int;
+                return Text(
+                  'Votos: $vr / $va',
+                  style: const TextStyle(fontSize: 13),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            ..._criterios.keys.map(
+              (nombre) => Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 6,
+                ),
+                child: _buildFilaCriterio(nombre),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text('Total: ${_totalEvaluacion()} / 28'),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: _enviarEvaluacionJurado,
+              icon: const Icon(Icons.rate_review),
+              label: const Text('Enviar evaluación'),
+            ),
           ],
         ),
       ),

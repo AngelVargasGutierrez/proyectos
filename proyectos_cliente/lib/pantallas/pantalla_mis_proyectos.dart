@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../modelos/proyecto.dart';
 import '../servicios/servicio_autenticacion.dart';
 import '../servicios/servicio_concursos.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../utilidades/estilos.dart';
 import '../widgets/widgets_personalizados.dart';
 
@@ -30,13 +31,25 @@ class _PantallaMisProyectosState extends State<PantallaMisProyectos> {
 
     try {
       final estudiante = ServicioAutenticacion.instancia.estudianteActual;
-      if (estudiante != null) {
+      String uid = estudiante?.id ?? '';
+      if (uid.isEmpty) {
+        try {
+          final authUid = FirebaseAuth.instance.currentUser?.uid;
+          if (authUid != null && authUid.isNotEmpty) uid = authUid;
+        } catch (_) {}
+      }
+      if (uid.isNotEmpty) {
         final proyectos = await ServicioConcursos.instancia
-            .obtenerProyectosEstudiante(estudiante.id);
-        
+            .obtenerProyectosEstudiante(uid);
         if (mounted) {
           setState(() {
             _proyectos = proyectos;
+            _cargando = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
             _cargando = false;
           });
         }
@@ -85,12 +98,34 @@ class _PantallaMisProyectosState extends State<PantallaMisProyectos> {
             mainAxisSize: MainAxisSize.min,
             children: [
               _construirFilaDetalle('Estado:', proyecto.estadoTexto),
+              if ((proyecto.categoriaNombre ?? '').isNotEmpty)
+                _construirFilaDetalle('Categoría:', proyecto.categoriaNombre!),
               _construirFilaDetalle(
                 'Fecha de envio:',
                 '${proyecto.fechaEnvio.day}/${proyecto.fechaEnvio.month}/${proyecto.fechaEnvio.year}',
               ),
               _construirFilaDetalle('Enlace GitHub:', proyecto.enlaceGithub),
               _construirFilaDetalle('Archivo:', proyecto.archivoZip),
+              if ((proyecto.onedriveUrl ?? '').isNotEmpty &&
+                  (proyecto.estado == EstadoProyecto.aprobado || proyecto.estado == EstadoProyecto.apto))
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: InkWell(
+                    onTap: () async {
+                      final uri = Uri.parse(proyecto.onedriveUrl!.trim());
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri);
+                      }
+                    },
+                    child: Row(
+                      children: [
+                        const Icon(Icons.cloud_outlined, color: Colores.primario),
+                        const SizedBox(width: 8),
+                        const Text('Abrir carpeta OneDrive'),
+                      ],
+                    ),
+                  ),
+                ),
               
               if (proyecto.comentarioAdmin != null) ...[
                 const SizedBox(height: 12),
@@ -253,6 +288,18 @@ class _PantallaMisProyectosState extends State<PantallaMisProyectos> {
       case EstadoProyecto.pendiente:
         colorEstado = Colores.advertencia;
         iconoEstado = Icons.schedule;
+        break;
+      case EstadoProyecto.apto:
+        colorEstado = Colores.exito;
+        iconoEstado = Icons.verified_user;
+        break;
+      case EstadoProyecto.finalizado:
+        colorEstado = Colores.gris;
+        iconoEstado = Icons.flag;
+        break;
+      case EstadoProyecto.ganador:
+        colorEstado = Colors.purple;
+        iconoEstado = Icons.emoji_events;
         break;
     }
 

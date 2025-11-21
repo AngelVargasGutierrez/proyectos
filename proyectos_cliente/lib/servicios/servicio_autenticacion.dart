@@ -29,8 +29,12 @@ class ServicioAutenticacion {
     required String contrasena,
   }) async {
     try {
+      final correoNorm = correo.trim().toLowerCase();
+      const allowedDomains = ['@upt.pe', '@gmail.com'];
+      final permitido = allowedDomains.any((d) => correoNorm.endsWith(d));
+      if (!permitido) return false;
       await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: correo.trim(),
+        email: correoNorm,
         password: contrasena,
       );
       final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -42,7 +46,7 @@ class ServicioAutenticacion {
           'nombres': nombres.trim(),
           'apellidos': apellidos.trim(),
           'codigo_universitario': codigoUniversitario.trim(),
-          'correo': correo.trim(),
+          'correo': correoNorm,
           'numero_telefono': numeroTelefonico.trim(),
           'ciclo': ciclo,
         }, SetOptions(merge: true));
@@ -51,7 +55,7 @@ class ServicioAutenticacion {
           nombres: nombres.trim(),
           apellidos: apellidos.trim(),
           codigoUniversitario: codigoUniversitario.trim(),
-          correo: correo.trim(),
+          correo: correoNorm,
           numeroTelefonico: numeroTelefonico.trim(),
           ciclo: ciclo,
         );
@@ -70,8 +74,12 @@ class ServicioAutenticacion {
     required String contrasena,
   }) async {
     try {
+      final correoNorm = correo.trim().toLowerCase();
+      const allowedDomains = ['@upt.pe', '@gmail.com'];
+      final permitido = allowedDomains.any((d) => correoNorm.endsWith(d));
+      if (!permitido) return false;
       await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: correo.trim(),
+        email: correoNorm,
         password: contrasena,
       );
 
@@ -87,7 +95,7 @@ class ServicioAutenticacion {
           nombres: (data['nombres'] ?? '') as String,
           apellidos: (data['apellidos'] ?? '') as String,
           codigoUniversitario: (data['codigo_universitario'] ?? '') as String,
-          correo: (data['correo'] ?? correo.trim()) as String,
+          correo: (data['correo'] ?? correoNorm) as String,
           numeroTelefonico: (data['numero_telefono'] ?? '') as String,
           ciclo: (data['ciclo'] ?? 0) as int,
         );
@@ -99,7 +107,7 @@ class ServicioAutenticacion {
         'nombres': '',
         'apellidos': '',
         'codigo_universitario': '',
-        'correo': correo.trim(),
+        'correo': correoNorm,
         'numero_telefono': '',
         'ciclo': 0,
       }, SetOptions(merge: true));
@@ -108,7 +116,7 @@ class ServicioAutenticacion {
         nombres: '',
         apellidos: '',
         codigoUniversitario: '',
-        correo: correo.trim(),
+        correo: correoNorm,
         numeroTelefonico: '',
         ciclo: 0,
       );

@@ -6,6 +6,9 @@ class Concurso {
   final DateTime fechaFin;
   final bool activo;
   final List<Categoria> categorias;
+  final DateTime? fechaRevision;
+  final DateTime? fechaConfirmacionAceptados;
+  final String? basesUrl;
 
   Concurso({
     required this.id,
@@ -15,6 +18,9 @@ class Concurso {
     required this.fechaFin,
     required this.activo,
     required this.categorias,
+    this.fechaRevision,
+    this.fechaConfirmacionAceptados,
+    this.basesUrl,
   });
 
   factory Concurso.desdeJson(Map<String, dynamic> json) {
@@ -28,6 +34,9 @@ class Concurso {
       categorias: (json['categorias'] as List<dynamic>?)
           ?.map((categoria) => Categoria.desdeJson(categoria))
           .toList() ?? [],
+      fechaRevision: json['fecha_revision'] != null ? DateTime.parse(json['fecha_revision']) : null,
+      fechaConfirmacionAceptados: json['fecha_confirmacion_aceptados'] != null ? DateTime.parse(json['fecha_confirmacion_aceptados']) : null,
+      basesUrl: json['bases_url'],
     );
   }
 
@@ -40,6 +49,9 @@ class Concurso {
       'fecha_fin': fechaFin.toIso8601String(),
       'activo': activo,
       'categorias': categorias.map((categoria) => categoria.aJson()).toList(),
+      if (fechaRevision != null) 'fecha_revision': fechaRevision!.toIso8601String(),
+      if (fechaConfirmacionAceptados != null) 'fecha_confirmacion_aceptados': fechaConfirmacionAceptados!.toIso8601String(),
+      if (basesUrl != null) 'bases_url': basesUrl,
     };
   }
 

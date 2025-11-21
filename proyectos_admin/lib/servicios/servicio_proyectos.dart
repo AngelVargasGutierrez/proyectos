@@ -163,24 +163,79 @@ class ServicioProyectos {
   }) async {
     try {
       // Verificar asignación del jurado a la categoría
-      final refCategoria = FirebaseFirestore.instance
+      DocumentReference<Map<String, dynamic>> refCategoria = FirebaseFirestore.instance
           .collection('concursos')
           .doc(concursoId)
           .collection('categorias')
           .doc(categoriaId);
-      final catSnap = await refCategoria.get();
-      final catData = catSnap.data() ?? <String, dynamic>{};
-      final asignadosUids = ((catData['jurados_asignados_uids'] ?? []) as List)
+      DocumentSnapshot<Map<String, dynamic>> catSnap = await refCategoria.get();
+      Map<String, dynamic> catData = catSnap.data() ?? <String, dynamic>{};
+      var asignadosUids = ((catData['jurados_asignados_uids'] ?? []) as List)
           .map((e) => e.toString())
           .toList();
-      final asignadosNombres = ((catData['jurados_asignados'] ?? []) as List)
+      var asignadosNombres = ((catData['jurados_asignados'] ?? []) as List)
           .map((e) => e.toString().toUpperCase().trim())
           .toList();
+      var asignadosCorreos = ((catData['jurados_asignados_correos'] ?? []) as List)
+          .map((e) => e.toString().toLowerCase().trim())
+          .toList();
+
+      // Fallback robusto: si la categoría no existe o no tiene asignaciones, intentar resolver el ID correcto
+      if ((asignadosUids.isEmpty && asignadosNombres.isEmpty && asignadosCorreos.isEmpty) || !catSnap.exists) {
+        final refProyectoTmp = FirebaseFirestore.instance
+            .collection('concursos')
+            .doc(concursoId)
+            .collection('proyectos')
+            .doc(proyectoId);
+        final pSnap = await refProyectoTmp.get();
+        final pData = pSnap.data() ?? <String, dynamic>{};
+        String catId2 = (pData['categoria_id'] ?? '').toString();
+        if (catId2.isEmpty) {
+          final parts = proyectoId.split('-');
+          if (parts.isNotEmpty) catId2 = parts.first;
+        }
+        if (catId2.isEmpty) {
+          final nombreCat = ((pData['categoria_nombre'] ?? '') as String).trim();
+          if (nombreCat.isNotEmpty) {
+            final catsAll = await FirebaseFirestore.instance
+                .collection('concursos')
+                .doc(concursoId)
+                .collection('categorias')
+                .get();
+            for (final c in catsAll.docs) {
+              final cd = c.data();
+              final nom = ((cd['nombre'] ?? '') as String).trim();
+              if (nom == nombreCat) {
+                catId2 = c.id;
+                break;
+              }
+            }
+          }
+        }
+        if (catId2.isNotEmpty) {
+          refCategoria = FirebaseFirestore.instance
+              .collection('concursos')
+              .doc(concursoId)
+              .collection('categorias')
+              .doc(catId2);
+          catSnap = await refCategoria.get();
+          catData = catSnap.data() ?? <String, dynamic>{};
+          asignadosUids = ((catData['jurados_asignados_uids'] ?? []) as List)
+              .map((e) => e.toString())
+              .toList();
+          asignadosNombres = ((catData['jurados_asignados'] ?? []) as List)
+              .map((e) => e.toString().toUpperCase().trim())
+              .toList();
+          asignadosCorreos = ((catData['jurados_asignados_correos'] ?? []) as List)
+              .map((e) => e.toString().toLowerCase().trim())
+              .toList();
+        }
+      }
       bool autorizado = false;
       if (asignadosUids.isNotEmpty) {
         autorizado = asignadosUids.contains(juradoUid);
       }
-      if (!autorizado && asignadosNombres.isNotEmpty) {
+      if (!autorizado && (asignadosCorreos.isNotEmpty || asignadosNombres.isNotEmpty)) {
         DocumentSnapshot<Map<String, dynamic>> doc = await FirebaseFirestore
             .instance
             .collection('jurados')
@@ -205,6 +260,13 @@ class ServicioProyectos {
             .where((s) => s.isNotEmpty)
             .join(' ')
             .trim();
+        final correo = (jd['correo'] ?? jd['email'] ?? '')
+            .toString()
+            .toLowerCase()
+            .trim();
+        if (correo.isNotEmpty && asignadosCorreos.contains(correo)) {
+          autorizado = true;
+        }
         if (completo.isNotEmpty) {
           autorizado = asignadosNombres.contains(completo);
         }
@@ -255,43 +317,81 @@ class ServicioProyectos {
       // Verificar si TODOS los jurados asignados a la categoría ya votaron
       final asignadosUids2 = (catData['jurados_asignados_uids'] ?? []) as List?;
       final asignadosNombres2 = (catData['jurados_asignados'] ?? []) as List?;
+      final asignadosCorreos2 = (catData['jurados_asignados_correos'] ?? []) as List?;
       int totalAsignados = 0;
       if (asignadosUids2 != null && asignadosUids2.isNotEmpty) {
         totalAsignados = asignadosUids2.length;
       } else if (asignadosNombres2 != null && asignadosNombres2.isNotEmpty) {
         totalAsignados = asignadosNombres2.length;
+      } else if (asignadosCorreos2 != null && asignadosCorreos2.isNotEmpty) {
+        totalAsignados = asignadosCorreos2.length;
       }
       final votosRecibidos = evals.length;
+      await refProyecto.update({
+        'votos_recibidos': votosRecibidos,
+        'votos_asignados': totalAsignados,
+      });
 
-      // Solo declarar ganador si todos los jurados asignados ya votaron
-      if (totalAsignados > 0 && votosRecibidos >= totalAsignados) {
-        // Calcular ganador automático dentro de la categoría: mayor puntuación
+      // Solo declarar ganador cuando hayan votado TODOS los jurados asignados
+      final requeridos = totalAsignados;
+      if (requeridos > 0 && votosRecibidos >= requeridos) {
         final qsCategoria = await FirebaseFirestore.instance
-          .collection('concursos')
-          .doc(concursoId)
-          .collection('proyectos')
-          .where('categoria_id', isEqualTo: categoriaId)
-          .get();
+            .collection('concursos')
+            .doc(concursoId)
+            .collection('proyectos')
+            .where('categoria_id', isEqualTo: categoriaId)
+            .get();
 
         if (qsCategoria.docs.isNotEmpty) {
-          String? ganadorId;
-          double maxP = -1;
+          bool todosCompletos = true;
           for (final d in qsCategoria.docs) {
             final pd = d.data();
-            final p = ((pd['puntuacion'] ?? 0) as num).toDouble();
-            if (p > maxP) {
-              maxP = p;
-              ganadorId = d.id;
+            final vr = ((pd['votos_recibidos'] ?? 0) as num).toInt();
+            if (vr < requeridos) {
+              todosCompletos = false;
+              break;
             }
           }
-          if (ganadorId != null && maxP > 0) {
+
+          if (todosCompletos) {
+            String? ganadorId;
+            double maxP = -1;
             for (final d in qsCategoria.docs) {
-              final nuevoEstado = d.id == ganadorId
-                  ? 'ganador'
-                  : (pdEstado(d.data()) == 'ganador' ? 'aprobado' : null);
-              if (nuevoEstado != null) {
-                await d.reference.update({'estado': nuevoEstado});
+              final pd = d.data();
+              double p = ((pd['puntuacion'] ?? 0) as num).toDouble();
+              if (p <= 0) {
+                final evalsPd = ((pd['evaluaciones_jurado'] ?? <String, dynamic>{}) as Map<String, dynamic>);
+                if (evalsPd.isNotEmpty) {
+                  double s = 0;
+                  int c = 0;
+                  evalsPd.forEach((_, v) {
+                    final m = (v ?? <String, dynamic>{}) as Map<String, dynamic>;
+                    final t = ((m['total'] ?? 0) as num).toDouble();
+                    final n = (t / 28.0) * 20.0;
+                    s += n;
+                    c += 1;
+                  });
+                  p = c > 0 ? (s / c) : 0.0;
+                }
               }
+              if (p > maxP) {
+                maxP = p;
+                ganadorId = d.id;
+              }
+            }
+            if (ganadorId != null && maxP > 0) {
+              for (final d in qsCategoria.docs) {
+                final nuevoEstado = d.id == ganadorId ? 'ganador' : (pdEstado(d.data()) == 'ganador' ? 'aprobado' : null);
+                if (nuevoEstado != null) {
+                  await d.reference.update({'estado': nuevoEstado});
+                }
+              }
+              await FirebaseFirestore.instance
+                  .collection('concursos')
+                  .doc(concursoId)
+                  .collection('proyectos')
+                  .doc(ganadorId)
+                  .update({'puntuacion_ganador': maxP});
             }
           }
         }
@@ -594,6 +694,38 @@ class ServicioProyectos {
         final actual = ((data['categoria_nombre'] ?? '') as String).trim();
         if (actual != nombre) {
           batch.update(d.reference, {'categoria_nombre': nombre});
+          updates++;
+        }
+      }
+      if (updates > 0) await batch.commit();
+      return updates;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<int> normalizarCamposProyectosConcurso(String concursoId) async {
+    try {
+      int updates = 0;
+      final qs = await FirebaseFirestore.instance
+          .collection('concursos')
+          .doc(concursoId)
+          .collection('proyectos')
+          .get();
+      final batch = FirebaseFirestore.instance.batch();
+      for (final d in qs.docs) {
+        final data = d.data();
+        final patch = <String, dynamic>{};
+        if (data['equipo_correos'] == null) patch['equipo_correos'] = [];
+        if (data['equipo_ms_uids'] == null) patch['equipo_ms_uids'] = [];
+        if (data['equipo_lider_uid'] == null) patch['equipo_lider_uid'] = '';
+        if (data['equipo_lider_correo'] == null) patch['equipo_lider_correo'] = '';
+        if (data['aval_url'] == null) patch['aval_url'] = '';
+        if (data['aval_base64'] == null) patch['aval_base64'] = '';
+        if (data['aval_mime'] == null) patch['aval_mime'] = '';
+        if (data['aval_nombre'] == null) patch['aval_nombre'] = '';
+        if (patch.isNotEmpty) {
+          batch.update(d.reference, patch);
           updates++;
         }
       }

@@ -32,11 +32,15 @@ class _PantallaEnviarProyectoState extends State<PantallaEnviarProyecto> {
   Uint8List? _zipBytes;
   PlatformFile? _zipFile;
   bool _cargando = false;
+  final List<TextEditingController> _miembrosCorreos = List.generate(4, (_) => TextEditingController());
+  Uint8List? _avalBytes;
+  String? _avalNombre;
 
   @override
   void dispose() {
     _controladorNombreProyecto.dispose();
     _controladorEnlaceGithub.dispose();
+    for (final c in _miembrosCorreos) c.dispose();
     super.dispose();
   }
 
@@ -45,21 +49,18 @@ class _PantallaEnviarProyectoState extends State<PantallaEnviarProyecto> {
       final res = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['zip', 'rar'],
-        withData: true, // necesario en web para obtener bytes
+        withData: true,
       );
       final file = res?.files.first;
-      // Limitar tamaño máximo para evitar problemas en Web (memoria/carga)
-      const int maxBytes = 150 * 1024 * 1024; // 150 MB
+      const int maxBytes = 150 * 1024 * 1024;
       if (file != null && (file.bytes?.isNotEmpty ?? false)) {
         if ((file.size) > maxBytes) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('El archivo supera el límite de 150 MB'),
-                backgroundColor: Colores.advertencia,
-              ),
-            );
-          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('El archivo supera el límite de 150 MB'),
+              backgroundColor: Colores.advertencia,
+            ),
+          );
           return;
         }
         setState(() {
@@ -68,24 +69,44 @@ class _PantallaEnviarProyectoState extends State<PantallaEnviarProyecto> {
           _zipFile = file;
         });
       } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('No se seleccionó un archivo ZIP válido'),
-              backgroundColor: Colores.advertencia,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Error al seleccionar archivo'),
-            backgroundColor: Colores.error,
+            content: Text('No se seleccionó un archivo ZIP válido'),
+            backgroundColor: Colores.advertencia,
           ),
         );
       }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error al seleccionar archivo'),
+          backgroundColor: Colores.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _seleccionarAval() async {
+    try {
+      final res = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: true,
+      );
+      final file = res?.files.first;
+      if (file != null && (file.bytes?.isNotEmpty ?? false)) {
+        setState(() {
+          _avalNombre = file.name;
+          _avalBytes = file.bytes;
+        });
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Selecciona una imagen válida del aval')),
+        );
+      }
+    } catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error al seleccionar aval')),
+      );
     }
   }
 
@@ -113,6 +134,13 @@ class _PantallaEnviarProyectoState extends State<PantallaEnviarProyecto> {
   Future<void> _enviarProyecto() async {
     if (!_formKey.currentState!.validate()) return;
     // El archivo es opcional: no bloqueamos si no hay selección
+    // Aval obligatorio
+    if (_avalBytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Debes subir la imagen del aval del docente')),
+      );
+      return;
+    }
 
     // Mostrar dialogo de confirmacion
     final confirmar = await showDialog<bool>(
@@ -160,6 +188,9 @@ class _PantallaEnviarProyectoState extends State<PantallaEnviarProyecto> {
         enlaceGithub: _controladorEnlaceGithub.text.trim(),
         archivoZipNombre: _archivoSeleccionado,
         archivoZipBytes: _zipBytes,
+        equipoCorreos: _miembrosCorreos.map((c) => c.text.trim().toLowerCase()).where((e) => e.isNotEmpty).toList(),
+        avalNombre: _avalNombre,
+        avalBytes: _avalBytes,
       );
 
       if (mounted) {
@@ -358,6 +389,47 @@ class _PantallaEnviarProyectoState extends State<PantallaEnviarProyecto> {
                 ],
               ),
               const SizedBox(height: 32),
+
+              // Equipo
+              Text('Equipo (2 a 5 integrantes)', style: Estilos.subtitulo),
+              const SizedBox(height: 8),
+              Text('Tu cuenta será el líder del equipo. Ingresa correos @upt.pe de tus integrantes (hasta 4).', style: Estilos.cuerpoSecundario),
+              const SizedBox(height: 8),
+              ...List.generate(_miembrosCorreos.length, (i) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: CampoTextoPersonalizado(
+                  etiqueta: 'Correo integrante ${i+1}',
+                  sugerencia: 'nombre.apellido@upt.pe',
+                  controlador: _miembrosCorreos[i],
+                  tipoTeclado: TextInputType.emailAddress,
+                ),
+              )),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colores.fondo,
+                  borderRadius: Estilos.bordeRedondeado,
+                  border: Border.all(color: Colores.grisClaro),
+                ),
+                child: const Text('Debe haber entre 2 y 5 integrantes en total (tú + integrantes).'),
+              ),
+
+              const SizedBox(height: 24),
+
+              // Aval del docente (obligatorio)
+              Text('Aval del docente (screenshot del correo)', style: Estilos.subtitulo),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(child: Text(_avalNombre ?? 'Sin archivo', style: Estilos.cuerpo)),
+                  TextButton.icon(
+                    onPressed: _seleccionarAval,
+                    icon: const Icon(Icons.image),
+                    label: const Text('Subir imagen'),
+                  ),
+                ],
+              ),
 
               // Informacion importante
               Container(

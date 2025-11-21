@@ -7,6 +7,7 @@ import '../modelos/concurso.dart';
 import '../modelos/proyecto.dart';
 import '../modelos/categoria.dart';
 import 'pantalla_detalle_proyecto.dart';
+import '../servicios/servicio_concursos.dart';
 
 class PantallaProyectosConcurso extends StatefulWidget {
   final Concurso concurso;
@@ -269,6 +270,17 @@ class _PantallaProyectosConcursoState extends State<PantallaProyectosConcurso> {
                               color: Colors.amber[700],
                             ),
                           ),
+                          if (proyecto.estado == EstadoProyecto.ganador) ...[
+                            const SizedBox(width: 6),
+                            Text(
+                              'Ganador',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.purple[700],
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -440,6 +452,26 @@ class _PantallaProyectosConcursoState extends State<PantallaProyectosConcurso> {
                     },
                   );
                 }();
+              } else if (value == 'normalize_fields') {
+                () async {
+                  final prov = Provider.of<ProveedorProyectos>(context, listen: false);
+                  final count = await prov.normalizarCamposActual();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Campos normalizados en $count proyectos')),
+                    );
+                  }
+                }();
+              } else if (value == 'recalc_jurados') {
+                () async {
+                  final svc = ServicioConcursos();
+                  final n = await svc.recalcularAsignacionesJurados(widget.concurso.id);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Asignaciones de jurados recalculadas: $n categorías')),
+                    );
+                  }
+                }();
               }
             },
             itemBuilder: (context) => [
@@ -470,6 +502,26 @@ class _PantallaProyectosConcursoState extends State<PantallaProyectosConcurso> {
                     Icon(Icons.search),
                     SizedBox(width: 8),
                     Text('Diagnóstico de categorías'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'normalize_fields',
+                child: Row(
+                  children: [
+                    Icon(Icons.build),
+                    SizedBox(width: 8),
+                    Text('Normalizar campos de proyectos'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'recalc_jurados',
+                child: Row(
+                  children: [
+                    Icon(Icons.group),
+                    SizedBox(width: 8),
+                    Text('Recalcular jurados asignados'),
                   ],
                 ),
               ),

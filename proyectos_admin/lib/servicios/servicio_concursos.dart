@@ -41,12 +41,13 @@ class ServicioConcursos {
       final categoriasCol = concursoRef.collection('categorias');
       for (final cat in categorias) {
         final nombres = cat.juradosAsignados;
-        final uids = await _resolverUidsJurados(nombres);
+        final meta = await _resolverMetaJurados(nombres);
         await categoriasCol.add({
           'nombre': cat.nombre.trim(),
           'rango_ciclos': cat.rangoCiclos.trim(),
           'jurados_asignados': nombres,
-          'jurados_asignados_uids': uids,
+          'jurados_asignados_uids': meta['uids'] ?? [],
+          'jurados_asignados_correos': meta['correos'] ?? [],
         });
       }
       return true;
@@ -210,12 +211,13 @@ class ServicioConcursos {
       final nuevas = ref.collection('categorias');
       for (final cat in categorias) {
         final nombres = cat.juradosAsignados;
-        final uids = await _resolverUidsJurados(nombres);
+        final meta = await _resolverMetaJurados(nombres);
         await nuevas.add({
           'nombre': cat.nombre.trim(),
           'rango_ciclos': cat.rangoCiclos.trim(),
           'jurados_asignados': nombres,
-          'jurados_asignados_uids': uids,
+          'jurados_asignados_uids': meta['uids'] ?? [],
+          'jurados_asignados_correos': meta['correos'] ?? [],
         });
       }
       return true;
@@ -244,6 +246,33 @@ class ServicioConcursos {
       return true;
     } catch (e) {
       return false;
+    }
+  }
+
+  Future<int> recalcularAsignacionesJurados(String concursoId) async {
+    try {
+      final cats = await FirebaseFirestore.instance
+          .collection('concursos')
+          .doc(concursoId)
+          .collection('categorias')
+          .get();
+      int updates = 0;
+      for (final c in cats.docs) {
+        final data = c.data();
+        final nombres = ((data['jurados_asignados'] ?? []) as List)
+            .map((e) => e.toString())
+            .toList();
+        if (nombres.isEmpty) continue;
+        final meta = await _resolverMetaJurados(nombres);
+        await c.reference.update({
+          'jurados_asignados_uids': meta['uids'] ?? [],
+          'jurados_asignados_correos': meta['correos'] ?? [],
+        });
+        updates++;
+      }
+      return updates;
+    } catch (_) {
+      return 0;
     }
   }
 }
@@ -283,4 +312,34 @@ Future<List<String>> _resolverUidsJurados(List<String> nombres) async {
     }
   } catch (_) {}
   return result;
+}
+
+Future<Map<String, List<String>>> _resolverMetaJurados(List<String> nombres) async {
+  final uids = <String>[];
+  final correos = <String>[];
+  final norm = nombres.map((n) => n.trim().toUpperCase()).toList();
+  try {
+    final fuentes = [
+      FirebaseFirestore.instance.collection('jurado'),
+      FirebaseFirestore.instance.collection('jurados'),
+      FirebaseFirestore.instance.collection('administradores'),
+    ];
+    for (final col in fuentes) {
+      final snap = await col.get();
+      for (final d in snap.docs) {
+        final data = d.data();
+        final rol = ((data['rol'] ?? data['tipo'] ?? '') as String).toUpperCase();
+        if (col.id == 'administradores' && rol != 'JURADO') continue;
+        final nombre = ((data['nombre'] ?? data['nombres'] ?? '') as String).toUpperCase();
+        final apellidos = ((data['apellidos'] ?? '') as String).toUpperCase();
+        final completo = [nombre, apellidos].where((s) => s.isNotEmpty).join(' ').trim();
+        final correo = ((data['correo'] ?? data['email'] ?? '') as String).toLowerCase().trim();
+        if (norm.contains(completo)) {
+          if (!uids.contains(d.id)) uids.add(d.id);
+          if (correo.isNotEmpty && !correos.contains(correo)) correos.add(correo);
+        }
+      }
+    }
+  } catch (_) {}
+  return {'uids': uids, 'correos': correos};
 }
