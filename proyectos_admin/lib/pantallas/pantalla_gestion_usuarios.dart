@@ -187,17 +187,15 @@ class _PantallaGestionUsuariosState extends State<PantallaGestionUsuarios> {
                               ),
                             ],
                           ),
-                          trailing: metodoAuth == 'microsoft'
-                              ? IconButton(
-                                  icon: Icon(Icons.delete, color: Colors.red[700]),
-                                  onPressed: () => _confirmarEliminarUsuario(
-                                    context,
-                                    usuario['correo'],
-                                    usuario['rol'],
-                                    '${usuario['nombres']} ${usuario['apellidos']}',
-                                  ),
-                                )
-                              : null,
+                          trailing: IconButton(
+                            icon: Icon(Icons.delete, color: Colors.red[700]),
+                            onPressed: () => _confirmarEliminarUsuario(
+                              context,
+                              usuario['correo'],
+                              usuario['rol'],
+                              '${usuario['nombres']} ${usuario['apellidos']}',
+                            ),
+                          ),
                         ),
                       );
                     },
@@ -262,7 +260,10 @@ class _DialogoCrearUsuarioState extends State<DialogoCrearUsuario> {
   final _controladorApellidos = TextEditingController();
   final _controladorCorreo = TextEditingController();
   final _controladorTelefono = TextEditingController();
+  final _controladorContrasena = TextEditingController();
   RolUsuario _rolSeleccionado = RolUsuario.jurado;
+  String _tipoAutenticacion = 'microsoft'; // 'microsoft' o 'correo'
+  bool _mostrarContrasena = false;
 
   @override
   void dispose() {
@@ -270,6 +271,7 @@ class _DialogoCrearUsuarioState extends State<DialogoCrearUsuario> {
     _controladorApellidos.dispose();
     _controladorCorreo.dispose();
     _controladorTelefono.dispose();
+    _controladorContrasena.dispose();
     super.dispose();
   }
 
@@ -283,6 +285,8 @@ class _DialogoCrearUsuarioState extends State<DialogoCrearUsuario> {
         correo: _controladorCorreo.text,
         numeroTelefonico: _controladorTelefono.text,
         rol: _rolSeleccionado,
+        tipoAutenticacion: _tipoAutenticacion,
+        contrasena: _tipoAutenticacion == 'correo' ? _controladorContrasena.text : null,
       );
 
       if (exito && mounted) {
@@ -308,15 +312,51 @@ class _DialogoCrearUsuarioState extends State<DialogoCrearUsuario> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.blue[200]!),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.info, color: Colors.blue[700]),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text(
-                        'Este usuario iniciará sesión con Microsoft',
-                        style: TextStyle(fontSize: 12),
-                      ),
+                    Row(
+                      children: [
+                        Icon(Icons.login, color: Colors.blue[700]),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Tipo de autenticación',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: RadioListTile<String>(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Microsoft', style: TextStyle(fontSize: 13)),
+                            value: 'microsoft',
+                            groupValue: _tipoAutenticacion,
+                            onChanged: (value) {
+                              setState(() {
+                                _tipoAutenticacion = value!;
+                              });
+                            },
+                          ),
+                        ),
+                        Expanded(
+                          child: RadioListTile<String>(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Correo simple', style: TextStyle(fontSize: 13)),
+                            value: 'correo',
+                            groupValue: _tipoAutenticacion,
+                            onChanged: (value) {
+                              setState(() {
+                                _tipoAutenticacion = value!;
+                              });
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -354,10 +394,12 @@ class _DialogoCrearUsuarioState extends State<DialogoCrearUsuario> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _controladorCorreo,
-                decoration: const InputDecoration(
-                  labelText: 'Correo electrónico (Microsoft)',
-                  prefixIcon: Icon(Icons.email),
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: _tipoAutenticacion == 'microsoft' 
+                      ? 'Correo electrónico (Microsoft)' 
+                      : 'Correo electrónico',
+                  prefixIcon: const Icon(Icons.email),
+                  border: const OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.emailAddress,
                 validator: (value) {
@@ -371,6 +413,39 @@ class _DialogoCrearUsuarioState extends State<DialogoCrearUsuario> {
                 },
               ),
               const SizedBox(height: 12),
+              if (_tipoAutenticacion == 'correo') 
+                TextFormField(
+                  controller: _controladorContrasena,
+                  obscureText: !_mostrarContrasena,
+                  decoration: InputDecoration(
+                    labelText: 'Contraseña',
+                    prefixIcon: const Icon(Icons.lock),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _mostrarContrasena ? Icons.visibility : Icons.visibility_off,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _mostrarContrasena = !_mostrarContrasena;
+                        });
+                      },
+                    ),
+                    border: const OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (_tipoAutenticacion == 'correo') {
+                      if (value == null || value.isEmpty) {
+                        return 'Por favor ingrese una contraseña';
+                      }
+                      if (value.length < 6) {
+                        return 'La contraseña debe tener al menos 6 caracteres';
+                      }
+                    }
+                    return null;
+                  },
+                ),
+              if (_tipoAutenticacion == 'correo') 
+                const SizedBox(height: 12),
               TextFormField(
                 controller: _controladorTelefono,
                 decoration: const InputDecoration(

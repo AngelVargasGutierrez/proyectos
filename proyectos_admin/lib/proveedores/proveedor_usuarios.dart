@@ -23,6 +23,8 @@ class ProveedorUsuarios extends ChangeNotifier {
     required String correo,
     required String numeroTelefonico,
     required RolUsuario rol,
+    String tipoAutenticacion = 'microsoft',
+    String? contrasena,
   }) async {
     _cargando = true;
     _mensajeError = null;
@@ -30,13 +32,34 @@ class ProveedorUsuarios extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final exito = await _servicioUsuarios.crearUsuarioMicrosoft(
-        nombres: nombres,
-        apellidos: apellidos,
-        correo: correo,
-        numeroTelefonico: numeroTelefonico,
-        rol: rol,
-      );
+      final bool exito;
+      
+      if (tipoAutenticacion == 'microsoft') {
+        exito = await _servicioUsuarios.crearUsuarioMicrosoft(
+          nombres: nombres,
+          apellidos: apellidos,
+          correo: correo,
+          numeroTelefonico: numeroTelefonico,
+          rol: rol,
+        );
+      } else {
+        // Crear usuario con correo y contraseña
+        if (contrasena == null || contrasena.isEmpty) {
+          _mensajeError = 'La contraseña es requerida';
+          _cargando = false;
+          notifyListeners();
+          return false;
+        }
+        
+        exito = await _servicioUsuarios.crearUsuarioCorreo(
+          nombres: nombres,
+          apellidos: apellidos,
+          correo: correo,
+          numeroTelefonico: numeroTelefonico,
+          rol: rol,
+          contrasena: contrasena,
+        );
+      }
 
       if (exito) {
         _mensajeExito = 'Usuario creado exitosamente';

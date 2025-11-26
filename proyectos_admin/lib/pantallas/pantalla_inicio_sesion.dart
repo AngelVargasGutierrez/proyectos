@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../proveedores/proveedor_autenticacion.dart';
-import 'pantalla_registro.dart';
 import 'pantalla_principal.dart';
 
 class PantallaInicioSesion extends StatefulWidget {
@@ -213,15 +212,6 @@ class _PantallaInicioSesionState extends State<PantallaInicioSesion> {
                     ),
                   );
                 },
-              ),
-              const SizedBox(height: 16),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (context) => const PantallaRegistro()),
-                  );
-                },
-                child: const Text('No tienes cuenta? Registrate aqui'),
               ),
             ],
           ),
