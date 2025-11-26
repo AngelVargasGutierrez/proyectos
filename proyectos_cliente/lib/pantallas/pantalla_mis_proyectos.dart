@@ -31,16 +31,26 @@ class _PantallaMisProyectosState extends State<PantallaMisProyectos> {
 
     try {
       final estudiante = ServicioAutenticacion.instancia.estudianteActual;
+      print('DEBUG: Estudiante actual: ${estudiante?.id} - ${estudiante?.correo}');
+      
       String uid = estudiante?.id ?? '';
       if (uid.isEmpty) {
         try {
           final authUid = FirebaseAuth.instance.currentUser?.uid;
+          print('DEBUG: Firebase Auth UID: $authUid');
           if (authUid != null && authUid.isNotEmpty) uid = authUid;
         } catch (_) {}
       }
+      
+      print('DEBUG: UID final para buscar proyectos: $uid');
+      
       if (uid.isNotEmpty) {
         final proyectos = await ServicioConcursos.instancia
             .obtenerProyectosEstudiante(uid);
+        print('DEBUG: Proyectos encontrados: ${proyectos.length}');
+        for (var p in proyectos) {
+          print('  - ${p.nombre} (${p.estado.name})');
+        }
         if (mounted) {
           setState(() {
             _proyectos = proyectos;
@@ -48,6 +58,7 @@ class _PantallaMisProyectosState extends State<PantallaMisProyectos> {
           });
         }
       } else {
+        print('DEBUG: UID vacio, no se pueden cargar proyectos');
         if (mounted) {
           setState(() {
             _cargando = false;
@@ -55,13 +66,14 @@ class _PantallaMisProyectosState extends State<PantallaMisProyectos> {
         }
       }
     } catch (e) {
+      print('DEBUG: Error al cargar proyectos: $e');
       if (mounted) {
         setState(() {
           _cargando = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Error al cargar proyectos'),
+          SnackBar(
+            content: Text('Error al cargar proyectos: $e'),
             backgroundColor: Colores.error,
           ),
         );

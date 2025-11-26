@@ -163,67 +163,7 @@ class _PantallaInicioSesionState extends State<PantallaInicioSesion> {
                     alPresionar: _iniciarSesion,
                     cargando: _cargando,
                   ),
-                  const SizedBox(height: 12),
-
-                  // Boton de acceso rapido para pruebas
-                  BotonPersonalizado(
-                    texto: 'Acceso Rapido (Prueba)',
-                    alPresionar: _cargando ? null : () {
-                      _controladorCorreo.text = 'cliente@gmail.com';
-                      _controladorContrasena.text = 'cliente';
-                      _iniciarSesion();
-                    },
-                    cargando: false,
-                    color: Colores.acento,
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Credenciales de prueba
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                      color: Colores.acento.withOpacity(0.1),
-                      border: Border.all(color: Colores.acento.withOpacity(0.3)),
-                      borderRadius: Estilos.bordeRedondeado,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.info_outline,
-                              color: Colores.acento,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Credenciales de Prueba',
-                              style: Estilos.cuerpo.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: Colores.acento,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Email: cliente@gmail.com\nContrasena: cliente',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontFamily: 'monospace',
-                            color: Colores.negro,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'o cualquier email/contrasena para probar',
-                          style: Estilos.cuerpoSecundario,
-                        ),
-                      ],
-                    ),
-                  ),
+                  const SizedBox(height: 24),
 
                   // Enlace a registro
                   Row(

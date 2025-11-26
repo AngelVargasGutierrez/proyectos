@@ -338,86 +338,110 @@ class ServicioConcursos {
 
   Future<List<Proyecto>> obtenerProyectosEstudiante(String estudianteId) async {
     try {
-      // Solo Firebase: excluir llamadas a API y consultar directamente Firestore
+      print('DEBUG servicio: Buscando proyectos para estudianteId: $estudianteId');
+      
+      // Correo del usuario para consultas por equipo
+      String correo = '';
       try {
-        // Correo del usuario para consultas por equipo
-        String correo = '';
+        final authMail = FirebaseAuth.instance.currentUser?.email;
+        if (authMail != null && authMail.isNotEmpty) {
+          correo = authMail.toLowerCase().trim();
+        }
+      } catch (_) {}
+      if (correo.isEmpty) {
         try {
-          final authMail = FirebaseAuth.instance.currentUser?.email;
-          if (authMail != null && authMail.isNotEmpty) {
-            correo = authMail.toLowerCase().trim();
-          }
+          final uDoc = await FirebaseFirestore.instance.collection('usuarios').doc(estudianteId).get();
+          final ud = uDoc.data() ?? <String, dynamic>{};
+          correo = ((ud['correo'] ?? '') as String).toLowerCase().trim();
         } catch (_) {}
-        if (correo.isEmpty) {
-          try {
-            final uDoc = await FirebaseFirestore.instance.collection('usuarios').doc(estudianteId).get();
-            final ud = uDoc.data() ?? <String, dynamic>{};
-            correo = ((ud['correo'] ?? '') as String).toLowerCase().trim();
-          } catch (_) {}
-        }
+      }
+      
+      print('DEBUG servicio: Correo del usuario: $correo');
 
-        final resultados = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-        // Proyectos enviados por el propio usuario
-        final q1 = await FirebaseFirestore.instance
-            .collectionGroup('proyectos')
-            .where('estudiante_id', isEqualTo: estudianteId)
-            .get();
-        resultados.addAll(q1.docs);
-        // Proyectos donde es líder por UID
-        final q2 = await FirebaseFirestore.instance
-            .collectionGroup('proyectos')
-            .where('equipo_lider_uid', isEqualTo: estudianteId)
-            .get();
-        resultados.addAll(q2.docs);
-        // Proyectos donde es líder por correo
-        if (correo.isNotEmpty) {
-          final q3 = await FirebaseFirestore.instance
-              .collectionGroup('proyectos')
-              .where('equipo_lider_correo', isEqualTo: correo)
+      // MÉTODO ALTERNATIVO: Obtener todos los concursos y buscar proyectos en cada uno
+      final proyectos = <Proyecto>[];
+      final vistos = <String>{};
+      
+      try {
+        // Obtener todos los concursos
+        final concursosSnap = await FirebaseFirestore.instance.collection('concursos').get();
+        print('DEBUG servicio: Total de concursos: ${concursosSnap.docs.length}');
+        
+        for (final concursoDoc in concursosSnap.docs) {
+          final concursoId = concursoDoc.id;
+          print('DEBUG servicio: Revisando concurso: $concursoId');
+          
+          // Obtener todos los proyectos de este concurso
+          final proyectosSnap = await FirebaseFirestore.instance
+              .collection('concursos')
+              .doc(concursoId)
+              .collection('proyectos')
               .get();
-          resultados.addAll(q3.docs);
-          // Proyectos donde figura como integrante
-          final q4 = await FirebaseFirestore.instance
-              .collectionGroup('proyectos')
-              .where('equipo_correos', arrayContains: correo)
-              .get();
-          resultados.addAll(q4.docs);
-        }
-
-        // Unificar por ruta (evitar duplicados) y mapear
-        final vistos = <String>{};
-        final proyectos = <Proyecto>[];
-        for (final doc in resultados) {
-          final key = doc.reference.path;
-          if (vistos.contains(key)) continue;
-          vistos.add(key);
-          final data = doc.data();
-          final concursoIdFs = doc.reference.parent.parent?.id ?? (data['concurso_id'] ?? '') as String;
-          final fechaEnvioTs = data['fecha_envio'];
-          DateTime fechaEnvio;
-          if (fechaEnvioTs is Timestamp) {
-            fechaEnvio = fechaEnvioTs.toDate();
-          } else if (fechaEnvioTs is String) {
-            fechaEnvio = DateTime.tryParse(fechaEnvioTs) ?? DateTime.now();
-          } else {
-            fechaEnvio = DateTime.now();
+          
+          print('DEBUG servicio: Proyectos en concurso $concursoId: ${proyectosSnap.docs.length}');
+          
+          for (final doc in proyectosSnap.docs) {
+            final key = doc.reference.path;
+            if (vistos.contains(key)) continue;
+            
+            final data = doc.data();
+            final proyectoEstudianteId = (data['estudiante_id'] ?? '') as String;
+            final equipoLiderUid = (data['equipo_lider_uid'] ?? '') as String;
+            final equipoLiderCorreo = ((data['equipo_lider_correo'] ?? '') as String).toLowerCase().trim();
+            final equipoCorreos = ((data['equipo_correos'] ?? []) as List)
+                .map((e) => e.toString().toLowerCase().trim())
+                .toList();
+            
+            // Verificar si este proyecto pertenece al usuario
+            bool esDelUsuario = false;
+            
+            if (proyectoEstudianteId == estudianteId) {
+              esDelUsuario = true;
+              print('DEBUG servicio: Proyecto ${data['nombre']} coincide por estudiante_id');
+            } else if (equipoLiderUid == estudianteId) {
+              esDelUsuario = true;
+              print('DEBUG servicio: Proyecto ${data['nombre']} coincide por equipo_lider_uid');
+            } else if (correo.isNotEmpty && equipoLiderCorreo == correo) {
+              esDelUsuario = true;
+              print('DEBUG servicio: Proyecto ${data['nombre']} coincide por equipo_lider_correo');
+            } else if (correo.isNotEmpty && equipoCorreos.contains(correo)) {
+              esDelUsuario = true;
+              print('DEBUG servicio: Proyecto ${data['nombre']} coincide por equipo_correos');
+            }
+            
+            if (!esDelUsuario) continue;
+            
+            vistos.add(key);
+            
+            final fechaEnvioTs = data['fecha_envio'];
+            DateTime fechaEnvio;
+            if (fechaEnvioTs is Timestamp) {
+              fechaEnvio = fechaEnvioTs.toDate();
+            } else if (fechaEnvioTs is String) {
+              fechaEnvio = DateTime.tryParse(fechaEnvioTs) ?? DateTime.now();
+            } else {
+              fechaEnvio = DateTime.now();
+            }
+            
+            final estadoStr = (data['estado'] ?? 'pendiente') as String;
+            proyectos.add(Proyecto(
+              id: doc.id,
+              nombre: (data['nombre'] ?? data['titulo'] ?? '') as String,
+              estudianteId: proyectoEstudianteId,
+              concursoId: concursoId,
+              categoriaId: (data['categoria_id'] ?? '') as String,
+              enlaceGithub: (data['enlace_github'] ?? data['link_github'] ?? '') as String,
+              archivoZip: (data['archivo_zip'] ?? '') as String,
+              estado: _estadoClienteDesdeApi(estadoStr),
+              fechaEnvio: fechaEnvio,
+              comentarioAdmin: (data['comentarios'] ?? data['comentario_admin']) as String?,
+              categoriaNombre: (data['categoria_nombre'] ?? '') as String?,
+              onedriveUrl: (data['onedrive_url'] ?? data['onedrive_folder'] ?? data['onedrive']) as String?,
+            ));
           }
-          final estadoStr = (data['estado'] ?? 'pendiente') as String;
-          proyectos.add(Proyecto(
-            id: doc.id,
-            nombre: (data['nombre'] ?? data['titulo'] ?? '') as String,
-            estudianteId: (data['estudiante_id'] ?? data['estudiante_uid'] ?? '') as String,
-            concursoId: concursoIdFs,
-            categoriaId: (data['categoria_id'] ?? '') as String,
-            enlaceGithub: (data['enlace_github'] ?? data['link_github'] ?? '') as String,
-            archivoZip: (data['archivo_zip'] ?? '') as String,
-            estado: _estadoClienteDesdeApi(estadoStr),
-            fechaEnvio: fechaEnvio,
-            comentarioAdmin: (data['comentarios'] ?? data['comentario_admin']) as String?,
-            categoriaNombre: (data['categoria_nombre'] ?? '') as String?,
-            onedriveUrl: (data['onedrive_url'] ?? data['onedrive_folder'] ?? data['onedrive']) as String?,
-          ));
         }
+        
+        print('DEBUG servicio: Total de proyectos únicos procesados: ${proyectos.length}');
         return proyectos;
       } catch (fsErr) {
         print('Error Firestore al obtener proyectos del estudiante: $fsErr');
